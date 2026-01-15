@@ -224,9 +224,9 @@ export default function FavoritesScreen() {
         // ✅ đi qua Tab "Trang chủ" -> HomeStack -> PostDetail
         // tùy app bạn đặt route, nếu khác thì đổi lại
         try {
-            navigation.navigate('HomeTab', {
-                screen: 'HomeStack',
-                params: { screen: 'PostDetail', params: { postId } },
+            navigation.navigate('Trang chủ', {
+                screen: 'PostDetail',
+                params: { postId },
             });
         } catch (e) {
             // fallback

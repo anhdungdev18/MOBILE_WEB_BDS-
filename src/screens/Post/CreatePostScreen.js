@@ -1,5 +1,6 @@
 // src/screens/Post/CreatePostScreen.js
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
@@ -17,7 +18,6 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import client from '../../api/client';
 import { ENDPOINTS } from '../../api/endpoints';
@@ -600,41 +600,81 @@ export default function CreatePostScreen({ navigation }) {
                 return;
             }
 
-            // ===== CREATE: FormData + ảnh =====
-            const form = new FormData();
+            // ===== CREATE: JSON nếu không có ảnh, multipart nếu có ảnh =====
+            let resData = null;
 
-            form.append('title', title.trim());
-            form.append('description', description.trim());
-            if (addressPayload) form.append('address', addressPayload);
+            if (!hasNewImages) {
+                const payload = {
+                    title: title.trim(),
+                    description: description.trim(),
+                    address: addressPayload,
+                    area: String(area).trim(),
+                    price: String(price).trim(),
+                    category_id: String(categoryId),
+                    post_type_id: String(postTypeId),
+                    location: locationPayload,
+                    details: Object.keys(cleanedDetails).length ? JSON.stringify(cleanedDetails) : null,
+                    other_info: otherInfoPayload,
+                };
 
-            form.append('area', String(area).trim());
-            form.append('price', String(price).trim());
+                Object.keys(payload).forEach((k) => payload[k] == null && delete payload[k]);
 
-            form.append('category_id', String(categoryId));
-            form.append('post_type_id', String(postTypeId));
+                const res = await client.post(ENDPOINTS.POSTS, payload);
+                resData = res?.data;
+            } else {
+                const form = new FormData();
 
-            form.append('location', locationPayload);
+                form.append('title', title.trim());
+                form.append('description', description.trim());
+                if (addressPayload) form.append('address', addressPayload);
 
-            if (Object.keys(cleanedDetails).length > 0) form.append('details', JSON.stringify(cleanedDetails));
-            if (otherInfoPayload) form.append('other_info', otherInfoPayload);
+                form.append('area', String(area).trim());
+                form.append('price', String(price).trim());
 
-            // images (chỉ upload ảnh local)
-            assets.forEach((a, idx) => {
-                if (!a?.uri) return;
-                if (a.__remote) return; // ảnh remote chỉ hiển thị, không upload lại
-                form.append('images', {
-                    uri: a.uri,
-                    name: `photo_${idx}.jpg`,
-                    type: 'image/jpeg',
+                form.append('category_id', String(categoryId));
+                form.append('post_type_id', String(postTypeId));
+
+                form.append('location', locationPayload);
+
+                if (Object.keys(cleanedDetails).length > 0) form.append('details', JSON.stringify(cleanedDetails));
+                if (otherInfoPayload) form.append('other_info', otherInfoPayload);
+
+                // images (chỉ upload ảnh local)
+                assets.forEach((a, idx) => {
+                    if (!a?.uri) return;
+                    if (a.__remote) return; // ảnh remote chỉ hiển thị, không upload lại
+                    form.append('images', {
+                        uri: a.uri,
+                        name: `photo_${idx}.jpg`,
+                        type: 'image/jpeg',
+                    });
                 });
-            });
 
-            const res = await client.post(ENDPOINTS.POSTS, form, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
+                const base = (client?.defaults?.baseURL || '').replace(/\/+$/, '');
+                const endpoint = ENDPOINTS.POSTS;
+                const url = base ? `${base}${endpoint}` : endpoint;
+                const token = await AsyncStorage.getItem('access_token');
+
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                    body: form,
+                });
+
+                if (!res.ok) {
+                    const text = await res.text();
+                    throw new Error(`POST failed: ${res.status} ${text}`);
+                }
+
+                try {
+                    resData = await res.json();
+                } catch {
+                    resData = null;
+                }
+            }
 
             Alert.alert('Thành công', 'Đăng bài thành công!');
-            const newId = res?.data?.id || res?.data?.result?.id;
+            const newId = resData?.id || resData?.result?.id;
 
             // ✅ sau khi tạo xong: reset để lần sau vào Đăng tin luôn trống
             resetForm({ clearParams: true });
@@ -642,7 +682,7 @@ export default function CreatePostScreen({ navigation }) {
             if (newId) {
                 navigation.navigate('Trang chủ', {
                     screen: 'PostDetail',
-                    params: { postId: newId, images: res?.data?.images || [] },
+                    params: { postId: newId, images: resData?.images || [] },
                 });
             } else {
                 navigation.goBack();

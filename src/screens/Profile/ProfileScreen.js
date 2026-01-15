@@ -77,13 +77,12 @@ export default function ProfileScreen() {
 
     const isVip = !!membership?.is_vip;
 
-    const startUpgradeVip = async () => {
+    const startUpgradeVip = async (planCode, planLabel) => {
         try {
             setUpgradeLoading(true);
 
-            // Nếu sau này bạn có màn chọn gói thì gửi plan_code vào đây
             const res = await client.post(ENDPOINTS.MEMBERSHIP_UPGRADE_INIT, {
-                plan_code: 'AGENT_1M',
+                plan_code: planCode,
             });
 
             const data = res.data || {};
@@ -93,7 +92,7 @@ export default function ProfileScreen() {
 
             Alert.alert(
                 'Nâng cấp VIP',
-                `Số tiền: ${amount ? `${amount} VND` : '—'}\nNội dung CK: ${note || '—'}\n\nMở QR để thanh toán?`,
+                `Gói: ${planLabel}\nSố tiền: ${amount ? `${amount} VND` : '—'}\nNội dung CK: ${note || '—'}\n\nMở QR để thanh toán?`,
                 [
                     { text: 'Đóng', style: 'cancel' },
                     {
@@ -115,6 +114,14 @@ export default function ProfileScreen() {
         } finally {
             setUpgradeLoading(false);
         }
+    };
+
+    const chooseVipPlan = () => {
+        Alert.alert('Chọn gói VIP', 'Vui lòng chọn thời hạn', [
+            { text: 'Hủy', style: 'cancel' },
+            { text: '1 tháng', onPress: () => startUpgradeVip('AGENT_1M', '1 tháng') },
+            { text: '3 tháng', onPress: () => startUpgradeVip('AGENT_3M', '3 tháng') },
+        ]);
     };
 
     return (
@@ -164,7 +171,7 @@ export default function ProfileScreen() {
 
                     <TouchableOpacity
                         style={[styles.vipButton, upgradeLoading && { opacity: 0.7 }]}
-                        onPress={startUpgradeVip}
+                        onPress={chooseVipPlan}
                         disabled={upgradeLoading}
                     >
                         {upgradeLoading ? (

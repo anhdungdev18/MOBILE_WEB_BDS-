@@ -161,10 +161,22 @@ export default function MyReviewsScreen({ navigation }) {
         }, [])
     );
 
+    const openDetail = (postId) => {
+        if (!postId) return;
+        try {
+            navigation.navigate('Trang chủ', {
+                screen: 'PostDetail',
+                params: { postId },
+            });
+        } catch (e) {
+            navigation.navigate('PostDetail', { postId });
+        }
+    };
+
     const headerTitle = useMemo(() => `Đánh giá của tôi`, []);
 
     const renderItem = ({ item }) => (
-        <View style={styles.card}>
+        <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={() => openDetail(item.post_id)}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Ionicons name="star" size={18} color="#F4B400" />
                 <Text style={styles.score}>{item.score}/5</Text>
@@ -184,13 +196,13 @@ export default function MyReviewsScreen({ navigation }) {
 
                 <TouchableOpacity
                     onPress={() =>
-                        navigation.navigate('Home', { screen: 'PostDetail', params: { postId: item.post_id } })
+                        openDetail(item.post_id)
                     }
                 >
                     <Text style={styles.open}>Xem bài</Text>
                 </TouchableOpacity>
             </View>
-        </View>
+        </TouchableOpacity>
     );
 
     return (

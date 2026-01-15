@@ -226,6 +226,21 @@ export default function ManagePostsScreen() {
     );
 
     // ✅ XÓA: đúng endpoint posts/<id> (KHÔNG có dấu / cuối)
+    const openDetail = useCallback(
+        (postId) => {
+            if (!postId) return;
+            try {
+                navigation.navigate("Trang chủ", {
+                    screen: "PostDetail",
+                    params: { postId },
+                });
+            } catch (e) {
+                navigation.navigate("PostDetail", { postId });
+            }
+        },
+        [navigation]
+    );
+
     const handleDelete = useCallback(
         async (post) => {
             Alert.alert("Xác nhận", "Bạn có chắc muốn xóa tin này?", [
@@ -262,7 +277,7 @@ export default function ManagePostsScreen() {
 
         return (
             <View style={styles.card}>
-                <View style={styles.row}>
+                <TouchableOpacity style={styles.row} activeOpacity={0.85} onPress={() => openDetail(item?.id)}>
                     <View style={styles.thumbWrap}>
                         {thumb ? (
                             <Image source={{ uri: thumb }} style={styles.thumb} resizeMode="cover" />
@@ -307,7 +322,7 @@ export default function ManagePostsScreen() {
                             </View>
                         </View>
                     </View>
-                </View>
+                </TouchableOpacity>
 
                 <View style={styles.actions}>
                     <TouchableOpacity

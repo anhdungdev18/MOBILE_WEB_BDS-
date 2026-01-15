@@ -1,5 +1,6 @@
 // src/screens/Profile/EditProfileScreen.js
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useMemo, useState } from 'react';
 import {
@@ -40,6 +41,11 @@ const guessMime = (uri) => {
     if (u.endsWith('.png')) return 'image/png';
     if (u.endsWith('.webp')) return 'image/webp';
     return 'image/jpeg';
+};
+
+const buildApiUrl = (endpoint) => {
+    const base = (client?.defaults?.baseURL || '').replace(/\/+$/, '');
+    return base ? `${base}${endpoint}` : endpoint;
 };
 
 export default function EditProfileScreen({ route, navigation }) {
@@ -86,8 +92,9 @@ export default function EditProfileScreen({ route, navigation }) {
                 return;
             }
 
+            const mediaTypes = ImagePicker.MediaType?.Images || ImagePicker.MediaTypeOptions?.Images;
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                mediaTypes,
                 allowsEditing: true,
                 aspect: [1, 1],
                 quality: 0.9,
@@ -126,6 +133,8 @@ export default function EditProfileScreen({ route, navigation }) {
             if (!validateCCCD(cccdTrim)) return Alert.alert('Lỗi', 'Số CCCD phải đúng 12 chữ số');
 
             setLoading(true);
+            const token = await AsyncStorage.getItem('access_token');
+            const authHeaders = token ? { Authorization: `Bearer ${token}` } : undefined;
 
             // 1) Upload avatar (nếu có) bằng API riêng
             if (avatarLocal?.uri) {
@@ -146,7 +155,15 @@ export default function EditProfileScreen({ route, navigation }) {
                     });
                 }
 
-                await client.post(ENDPOINTS.AVATAR_UPLOAD, avatarForm);
+                const avatarRes = await fetch(buildApiUrl(ENDPOINTS.AVATAR_UPLOAD), {
+                    method: 'POST',
+                    headers: authHeaders,
+                    body: avatarForm,
+                });
+                if (!avatarRes.ok) {
+                    const text = await avatarRes.text();
+                    throw new Error(`Avatar upload failed: ${avatarRes.status} ${text}`);
+                }
             }
 
             // 2) Update profile info
@@ -160,13 +177,27 @@ export default function EditProfileScreen({ route, navigation }) {
             form.append('bio', bioTrim || '');
 
             // ✅ Backend không cho PATCH -> dùng PUT
-            // ✅ Không set Content-Type thủ công (axios tự thêm boundary)
-            const res = await client.put(ENDPOINTS.PROFILE_UPDATE, form);
+            // ✅ Không set Content-Type thủ công (fetch tự thêm boundary)
+            const profileRes = await fetch(buildApiUrl(ENDPOINTS.PROFILE_UPDATE), {
+                method: 'PUT',
+                headers: authHeaders,
+                body: form,
+            });
+            if (!profileRes.ok) {
+                const text = await profileRes.text();
+                throw new Error(`Profile update failed: ${profileRes.status} ${text}`);
+            }
+            let resData = null;
+            try {
+                resData = await profileRes.json();
+            } catch {
+                resData = null;
+            }
 
-            console.log('Cập nhật profile:', res.data);
+            console.log('Cập nhật profile:', resData);
 
             // cache-bust (ưu tiên dữ liệu từ API update)
-            const newAbs = toAbsoluteMediaUrl(res.data?.anh_dai_dien) || initialAvatarAbs || DEFAULT_AVATAR;
+            const newAbs = toAbsoluteMediaUrl(resData?.anh_dai_dien) || initialAvatarAbs || DEFAULT_AVATAR;
             setAvatar(`${newAbs}?t=${Date.now()}`);
             setAvatarLocal(null);
 
