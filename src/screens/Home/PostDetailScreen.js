@@ -9,6 +9,7 @@ import {
     FlatList,
     Image,
     Linking,
+    Modal,
     ScrollView,
     StyleSheet,
     Text,
@@ -275,6 +276,10 @@ export default function PostDetailScreen() {
     const [images, setImages] = useState([]);
     const [activeIndex, setActiveIndex] = useState(0);
     const [favorited, setFavorited] = useState(false);
+    const [galleryVisible, setGalleryVisible] = useState(false);
+    const [galleryIndex, setGalleryIndex] = useState(0);
+
+    const galleryRef = useRef(null);
 
     // Owner
     const [ownerLoading, setOwnerLoading] = useState(false);
@@ -536,11 +541,28 @@ export default function PostDetailScreen() {
         setActiveIndex(idx);
     };
 
+    const onScrollGallery = (e) => {
+        const x = e?.nativeEvent?.contentOffset?.x ?? 0;
+        const idx = Math.round(x / width);
+        setGalleryIndex(idx);
+    };
+
     const scrollToIndex = (idx) => {
         if (!sliderRef.current) return;
         sliderRef.current.scrollToIndex({ index: idx, animated: true });
         setActiveIndex(idx);
     };
+
+    const openGallery = (idx) => {
+        setGalleryIndex(idx);
+        setGalleryVisible(true);
+    };
+
+    useEffect(() => {
+        if (!galleryVisible) return;
+        if (!galleryRef.current) return;
+        galleryRef.current.scrollToIndex({ index: galleryIndex, animated: false });
+    }, [galleryVisible, galleryIndex]);
 
     const openGoogleMap = () => {
         const loc = post?.location;
@@ -761,8 +783,13 @@ export default function PostDetailScreen() {
                                     showsHorizontalScrollIndicator={false}
                                     keyExtractor={(item, idx) => `${item}-${idx}`}
                                     onScroll={onScrollImages}
-                                    renderItem={({ item }) => (
-                                        <Image source={{ uri: item }} style={styles.hero} resizeMode="cover" />
+                                    renderItem={({ item, index }) => (
+                                        <TouchableOpacity
+                                            activeOpacity={0.9}
+                                            onPress={() => openGallery(index)}
+                                        >
+                                            <Image source={{ uri: item }} style={styles.hero} resizeMode="cover" />
+                                        </TouchableOpacity>
                                     )}
                                 />
 
@@ -777,7 +804,7 @@ export default function PostDetailScreen() {
                                         <TouchableOpacity
                                             key={`${x}-${idx}`}
                                             activeOpacity={0.85}
-                                            onPress={() => scrollToIndex(idx)}
+                                            onPress={() => openGallery(idx)}
                                         >
                                             <Image source={{ uri: x }} style={styles.thumb} />
                                         </TouchableOpacity>
@@ -1008,6 +1035,43 @@ export default function PostDetailScreen() {
                     </View>
                 </ScrollView>
             )}
+
+            <Modal
+                visible={galleryVisible}
+                transparent
+                onRequestClose={() => setGalleryVisible(false)}
+            >
+                <View style={styles.galleryBackdrop}>
+                    <FlatList
+                        ref={galleryRef}
+                        data={heroImages}
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        keyExtractor={(item, idx) => `${item}-${idx}`}
+                        onScroll={onScrollGallery}
+                        getItemLayout={(_, index) => ({
+                            length: width,
+                            offset: width * index,
+                            index,
+                        })}
+                        renderItem={({ item }) => (
+                            <View style={styles.galleryItem}>
+                                <Image source={{ uri: item }} style={styles.galleryImage} resizeMode="contain" />
+                            </View>
+                        )}
+                    />
+
+                    <View style={styles.galleryTopBar}>
+                        <Text style={styles.galleryCounter}>
+                            {Math.min(galleryIndex + 1, heroImages.length)}/{heroImages.length}
+                        </Text>
+                        <TouchableOpacity onPress={() => setGalleryVisible(false)} style={styles.galleryClose}>
+                            <Ionicons name="close" size={22} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -1053,6 +1117,33 @@ const styles = StyleSheet.create({
     },
     thumb: { width: 70, height: 70, borderRadius: 14, marginRight: 10, backgroundColor: '#eee' },
     moreThumb: { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.55)' },
+
+    galleryBackdrop: {
+        flex: 1,
+        backgroundColor: '#000',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    galleryItem: { width, height: '100%', justifyContent: 'center', alignItems: 'center' },
+    galleryImage: { width: '100%', height: '100%' },
+    galleryTopBar: {
+        position: 'absolute',
+        top: 16,
+        left: 12,
+        right: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    galleryCounter: { color: '#fff', fontWeight: '900' },
+    galleryClose: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
 
     container: { padding: 14 },
 
