@@ -25,6 +25,11 @@ export const ENDPOINTS = {
 
     CHATBOT: '/api/chatbot/',
 
+    // Realtime chat
+    CHAT_ROOMS: '/api/rooms/',
+    CHAT_ROOMS_MY: '/api/rooms/my/',
+    CHAT_ROOM_MESSAGES: (roomId) => `/api/rooms/${roomId}/messages/`,
+
     FAVORITES_TOGGLE: '/api/engagement/favorites/toggle/',
     FAVORITES_MY: '/api/engagement/favorites/my/',
 

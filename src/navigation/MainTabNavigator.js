@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
 
 import ManagePostsScreen from '../screens/Post/ManagePostsScreen';
+import ChatStack from './ChatStack';
 import HomeStack from './HomeStack';
 import PostStack from './PostStack';
 import ProfileStack from './ProfileStack';
@@ -44,12 +45,10 @@ function RequireAuth({ children, message }) {
     );
 }
 
-function ChatScreen() {
+function ChatGate() {
     return (
         <RequireAuth message="Bạn cần đăng nhập để dùng Chat.">
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <Text>Chat (sau này nối realtime/chat server)</Text>
-            </View>
+            <ChatStack />
         </RequireAuth>
     );
 }
@@ -151,7 +150,7 @@ export default function MainTabNavigator() {
                 })}
             />
 
-            <Tab.Screen name="Chat" component={ChatScreen} />
+            <Tab.Screen name="Chat" component={ChatGate} />
             <Tab.Screen name="Tài khoản" component={AccountGate} />
         </Tab.Navigator>
     );

@@ -1,7 +1,7 @@
 // src/screens/Home/PostDetailScreen.js
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import client from '../../api/client';
 import { ENDPOINTS } from '../../api/endpoints';
+import { AuthContext } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -229,6 +230,7 @@ export default function PostDetailScreen() {
     const navigation = useNavigation();
     const route = useRoute();
     const isFocused = useIsFocused();
+    const { userToken } = useContext(AuthContext);
 
     const postId = route?.params?.postId || route?.params?.id;
 
@@ -377,6 +379,40 @@ export default function PostDetailScreen() {
             setFavorited(fav);
         } catch {
             Alert.alert('Thông báo', 'Bạn cần đăng nhập để lưu tin.');
+        }
+    };
+
+    const startChat = async () => {
+        const ownerId = owner?.id || post?.owner_id || post?.ownerId || post?.owner;
+        if (!ownerId) {
+            Alert.alert('Thông báo', 'Không tìm thấy người đăng để bắt đầu chat.');
+            return;
+        }
+        if (!userToken) {
+            Alert.alert('Thông báo', 'Bạn cần đăng nhập để nhắn tin.');
+            navigation.navigate('Login');
+            return;
+        }
+
+        try {
+            const res = await client.post(ENDPOINTS.CHAT_ROOMS, {
+                seller_id: ownerId,
+                listing_id: postId,
+            });
+            const roomId = res?.data?.room_id;
+            if (!roomId) throw new Error('No room_id');
+
+            navigation.navigate('Chat', {
+                screen: 'ChatRoom',
+                params: {
+                    roomId,
+                    otherUserId: ownerId,
+                    otherUserName: ownerName,
+                },
+            });
+        } catch (e) {
+            const msg = e?.response?.data?.detail || 'Không tạo được phòng chat.';
+            Alert.alert('Thông báo', String(msg));
         }
     };
 
@@ -734,21 +770,28 @@ export default function PostDetailScreen() {
                                 </View>
                             </View>
 
-                            {(owner?.phone || owner?.email) && (
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        const phone = owner?.phone;
-                                        const email = owner?.email;
-                                        if (phone) Linking.openURL(`tel:${phone}`);
-                                        else if (email) Linking.openURL(`mailto:${email}`);
-                                    }}
-                                    activeOpacity={0.85}
-                                    style={styles.contactBtn}
-                                >
-                                    <Ionicons name="call-outline" size={18} color="#111" />
-                                    <Text style={styles.contactText}>Liên hệ</Text>
+                            <View style={styles.ownerActions}>
+                                {(owner?.phone || owner?.email) && (
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            const phone = owner?.phone;
+                                            const email = owner?.email;
+                                            if (phone) Linking.openURL(`tel:${phone}`);
+                                            else if (email) Linking.openURL(`mailto:${email}`);
+                                        }}
+                                        activeOpacity={0.85}
+                                        style={styles.contactBtn}
+                                    >
+                                        <Ionicons name="call-outline" size={18} color="#111" />
+                                        <Text style={styles.contactText}>Liên hệ</Text>
+                                    </TouchableOpacity>
+                                )}
+
+                                <TouchableOpacity activeOpacity={0.85} style={styles.chatBtn} onPress={startChat}>
+                                    <Ionicons name="chatbubble-ellipses-outline" size={18} color="#111" />
+                                    <Text style={styles.chatText}>Nhắn tin</Text>
                                 </TouchableOpacity>
-                            )}
+                            </View>
                         </View>
 
                         {/* Address + Map */}
@@ -1040,6 +1083,7 @@ const styles = StyleSheet.create({
     ownerLabel: { color: '#6b7280', fontWeight: '800', fontSize: 12 },
     ownerName: { color: '#111', fontWeight: '900', fontSize: 16, marginTop: 2 },
 
+    ownerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     contactBtn: {
         backgroundColor: '#f3f4f6',
         paddingHorizontal: 12,
@@ -1050,6 +1094,16 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     contactText: { fontWeight: '900', color: '#111' },
+    chatBtn: {
+        backgroundColor: '#FFEDB8',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 999,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    chatText: { fontWeight: '900', color: '#111' },
 
     divider: { height: 1, backgroundColor: '#eee', marginVertical: 12 },
 
