@@ -22,6 +22,18 @@ import client from '../../api/client';
 import { ENDPOINTS } from '../../api/endpoints';
 
 const { width } = Dimensions.get('window');
+const DEFAULT_AVATAR = 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
+
+const toAbsoluteMediaUrl = (maybePath) => {
+    if (!maybePath) return '';
+    const s = String(maybePath).trim();
+    if (!s) return '';
+    if (s.startsWith('http://') || s.startsWith('https://')) return s;
+
+    const base = (client?.defaults?.baseURL || '').replace(/\/+$/, '');
+    const path = s.replace(/^\/+/, '');
+    return base ? `${base}/${path}` : s;
+};
 
 // Engagement endpoints (Rating + Comment)
 const ENG_ENDPOINTS = {
@@ -75,6 +87,26 @@ const normalizeObject = (data) => {
     if (Array.isArray(data)) return { value: data.join(', ') };
     if (typeof data === 'object') return data;
     return { value: String(data) };
+};
+
+const getFullName = (data) => {
+    const first =
+        data?.first_name ||
+        data?.firstname ||
+        data?.firstName ||
+        data?.user_first_name ||
+        data?.owner_first_name ||
+        data?.ho ||
+        data?.first;
+    const last =
+        data?.last_name ||
+        data?.lastname ||
+        data?.lastName ||
+        data?.user_last_name ||
+        data?.owner_last_name ||
+        data?.ten ||
+        data?.last;
+    return [first, last].filter(Boolean).join(' ').trim();
 };
 
 const FIELD_LABELS = {
@@ -149,17 +181,16 @@ const KeyValueCard = ({ data }) => {
 };
 
 const Stars = ({ value = 0, size = 16 }) => {
-    const v = Math.round(Number(value) || 0);
+    const raw = Number(value) || 0;
+    const full = Math.floor(raw);
+    const hasHalf = raw - full > 0;
     return (
         <View style={{ flexDirection: 'row', gap: 2 }}>
-            {Array.from({ length: 5 }).map((_, i) => (
-                <Ionicons
-                    key={i}
-                    name={i < v ? 'star' : 'star-outline'}
-                    size={size}
-                    color={i < v ? '#F5A623' : '#999'}
-                />
-            ))}
+            {Array.from({ length: 5 }).map((_, i) => {
+                const name = i < full ? 'star' : i === full && hasHalf ? 'star-half' : 'star-outline';
+                const active = i < full || (i === full && hasHalf);
+                return <Ionicons key={i} name={name} size={size} color={active ? '#F5A623' : '#c7c7c7'} />;
+            })}
         </View>
     );
 };
@@ -531,13 +562,40 @@ export default function PostDetailScreen() {
     };
 
     const getAuthorName = (c) => {
-        const direct =
-            c?.user_name || c?.username || c?.user?.username || c?.user?.full_name || c?.user?.name;
-        if (direct) return direct;
-
+        const inlineUser = c?.user && typeof c.user === 'object' ? c.user : null;
         const uid = c?.user_id || c?.userId || c?.user?.id;
         const cached = uid ? authorCache?.[uid] : null;
-        return cached?.username || cached?.full_name || cached?.name || (uid ? String(uid) : '—');
+        const data = inlineUser || cached || c;
+
+        const fullName = getFullName(data);
+        if (fullName) return fullName;
+
+        const direct =
+            data?.full_name ||
+            data?.name ||
+            data?.user_name ||
+            data?.username ||
+            inlineUser?.full_name ||
+            inlineUser?.name ||
+            inlineUser?.username;
+        if (direct) return String(direct);
+
+        return uid ? String(uid) : '??"';
+    };
+
+    const getAuthorAvatar = (c) => {
+        const inlineUser = c?.user && typeof c.user === 'object' ? c.user : null;
+        const uid = c?.user_id || c?.userId || c?.user?.id;
+        const cached = uid ? authorCache?.[uid] : null;
+        const data = inlineUser || cached || c;
+        const raw =
+            data?.anh_dai_dien ||
+            data?.avatar ||
+            data?.avatar_url ||
+            data?.image ||
+            data?.image_url ||
+            data?.url;
+        return toAbsoluteMediaUrl(raw) || DEFAULT_AVATAR;
     };
 
     const getTimeText = (c) => c?.created_at || c?.createdAt || c?.time || '';
@@ -548,12 +606,17 @@ export default function PostDetailScreen() {
         const content = node?.content || node?.text || node?.message || node?.body || '';
         const author = getAuthorName(node);
         const created = getTimeText(node);
+        const avatar = getAuthorAvatar(node);
 
         return (
             <View key={node._id} style={[styles.cmtItem, level > 0 && { marginLeft: 18 }]}>
                 <View style={styles.cmtHeader}>
                     <View style={styles.cmtAvatar}>
-                        <Ionicons name="person" size={14} color="#666" />
+                        {avatar ? (
+                            <Image source={{ uri: avatar }} style={styles.cmtAvatarImage} />
+                        ) : (
+                            <Ionicons name="person" size={14} color="#666" />
+                        )}
                     </View>
 
                     <View style={{ flex: 1 }}>
@@ -621,16 +684,48 @@ export default function PostDetailScreen() {
     };
 
     const starCounts = useMemo(() => getStarCounts(ratingSummary), [ratingSummary]);
-    const totalRatings = Number(ratingSummary?.count ?? ratingSummary?.total ?? 0) || 0;
+    const totalFromCounts = useMemo(() => {
+        if (!starCounts) return 0;
+        return [1, 2, 3, 4, 5].reduce((sum, k) => sum + (Number(starCounts[k]) || 0), 0);
+    }, [starCounts]);
+    const totalRatings = Number(ratingSummary?.count ?? ratingSummary?.total ?? totalFromCounts ?? 0) || 0;
+    const avgFromCounts = totalFromCounts
+        ? [1, 2, 3, 4, 5].reduce((sum, k) => sum + k * (Number(starCounts?.[k]) || 0), 0) /
+        totalFromCounts
+        : 0;
+    const avgScore = Number(ratingSummary?.avg ?? ratingSummary?.average ?? 0) || avgFromCounts;
 
+    const ownerProfile =
+        owner && typeof owner === 'object'
+            ? owner
+            : post?.owner && typeof post.owner === 'object'
+                ? post.owner
+                : null;
+    const ownerData = ownerProfile || {
+        owner_first_name: post?.owner_first_name,
+        owner_last_name: post?.owner_last_name,
+        first_name: post?.owner_first_name,
+        last_name: post?.owner_last_name,
+    };
+    const ownerFullName = getFullName(ownerData);
     const ownerName =
-        owner?.username ||
-        owner?.full_name ||
-        owner?.name ||
+        ownerFullName ||
+        ownerProfile?.full_name ||
+        ownerProfile?.name ||
+        ownerProfile?.username ||
         post?.owner_username ||
         post?.owner_name ||
         post?.ownerUserName ||
-        '—';
+        '??"';
+    const ownerAvatar =
+        toAbsoluteMediaUrl(
+            ownerProfile?.anh_dai_dien ||
+            ownerProfile?.avatar ||
+            ownerProfile?.avatar_url ||
+            ownerProfile?.image ||
+            ownerProfile?.image_url ||
+            ownerProfile?.url
+        ) || DEFAULT_AVATAR;
 
     return (
         <SafeAreaView style={styles.safe}>
@@ -724,7 +819,11 @@ export default function PostDetailScreen() {
                         <View style={styles.ownerCard}>
                             <View style={styles.ownerLeft}>
                                 <View style={styles.avatar}>
-                                    <Ionicons name="person-outline" size={22} color="#666" />
+                                    {ownerAvatar ? (
+                                        <Image source={{ uri: ownerAvatar }} style={styles.avatarImage} />
+                                    ) : (
+                                        <Ionicons name="person-outline" size={22} color="#666" />
+                                    )}
                                 </View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={styles.ownerLabel}>Người đăng</Text>
@@ -841,11 +940,11 @@ export default function PostDetailScreen() {
                             <View style={styles.rowBetween}>
                                 <View>
                                     <Text style={{ fontWeight: '900', color: '#111' }}>
-                                        {ratingSummary?.avg ? Number(ratingSummary.avg).toFixed(1) : '—'} / 5
+                                        {totalRatings ? Number(avgScore).toFixed(1) : '—'} / 5
                                     </Text>
                                     <Text style={{ color: '#666', marginTop: 2 }}>{totalRatings} lượt đánh giá</Text>
                                 </View>
-                                <Stars value={ratingSummary?.avg || 0} size={18} />
+                                <Stars value={avgScore || 0} size={18} />
                             </View>
 
                             {/* Breakdown nếu có */}
@@ -853,12 +952,21 @@ export default function PostDetailScreen() {
                                 <View style={{ marginTop: 12, gap: 8 }}>
                                     {[5, 4, 3, 2, 1].map((k) => {
                                         const c = starCounts[k] || 0;
-                                        const pct = totalRatings ? Math.round((c / totalRatings) * 100) : 0;
+                                        const basePct = Math.round((k / 5) * 100);
+                                        const active = c > 0;
                                         return (
                                             <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                                                 <Text style={{ width: 22, fontWeight: '900', color: '#111' }}>{k}</Text>
                                                 <View style={styles.barWrap}>
-                                                    <View style={[styles.barFill, { width: `${pct}%` }]} />
+                                                    <View
+                                                        style={[
+                                                            styles.barFill,
+                                                            {
+                                                                width: `${basePct}%`,
+                                                                backgroundColor: active ? '#F5A623' : '#e5e7eb',
+                                                            },
+                                                        ]}
+                                                    />
                                                 </View>
                                                 <Text style={{ width: 52, textAlign: 'right', color: '#666' }}>{c}</Text>
                                             </View>
@@ -1037,6 +1145,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    avatarImage: { width: 40, height: 40, borderRadius: 999 },
     ownerLabel: { color: '#6b7280', fontWeight: '800', fontSize: 12 },
     ownerName: { color: '#111', fontWeight: '900', fontSize: 16, marginTop: 2 },
 
@@ -1092,6 +1201,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginTop: 2,
     },
+    cmtAvatarImage: { width: 26, height: 26, borderRadius: 999 },
     cmtAuthor: { fontWeight: '900', color: '#111', flex: 1 },
     cmtTime: { color: '#999', fontSize: 12, marginLeft: 10 },
     cmtText: { marginTop: 6, color: '#333', lineHeight: 18 },

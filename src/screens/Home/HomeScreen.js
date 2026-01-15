@@ -23,6 +23,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import apiClient from '../../api/client';
 import { ENDPOINTS } from '../../api/endpoints';
+import {
+    getDistrictsByProvinceCode,
+    getProvinces,
+    getWardsByDistrictCode,
+} from '../../utils/locations';
 
 const TX_TYPES = {
     ALL: 'ALL',
@@ -70,6 +75,9 @@ export default function HomeScreen() {
     const [province, setProvince] = useState(null);
     const [district, setDistrict] = useState(null);
     const [ward, setWard] = useState(null);
+    const [provinceOpen, setProvinceOpen] = useState(false);
+    const [districtOpen, setDistrictOpen] = useState(false);
+    const [wardOpen, setWardOpen] = useState(false);
 
     // ✅ Notifications placeholder
     const [unreadCount, setUnreadCount] = useState(0);
@@ -128,6 +136,19 @@ export default function HomeScreen() {
     const getFirstImageUrl = (p) => p?.images?.[0]?.image_url || p?.images?.[0]?.url || null;
 
     const norm = (v) => String(v ?? '').trim().toLowerCase();
+
+    const getPostLocationText = (p) =>
+        normalizeText(
+            addressMap?.[p?.id] ||
+            p?.address ||
+            p?.address_text ||
+            p?.location_text ||
+            p?.province ||
+            p?.district ||
+            p?.ward ||
+            p?.location ||
+            ''
+        );
 
     const isApproved = (p) => {
         const raw = p?.approval_status ?? p?.approval_status_id;
@@ -366,14 +387,16 @@ export default function HomeScreen() {
         setLocLoading(true);
         setLocError('');
         try {
-            const base = ENDPOINTS?.LOCATIONS_PROVINCES || ENDPOINTS?.PROVINCES || '/api/listings/locations/provinces';
-            const s = String(base).replace(/\/+$/, '');
-            const urls = [s, `${s}/`];
+            const base = ENDPOINTS?.LOCATIONS_PROVINCES || ENDPOINTS?.PROVINCES;
+            let arr = [];
+            if (base) {
+                const s = String(base).replace(/\/+$/, '');
+                const urls = [s, `${s}/`];
+                const data = await tryGetWithLog(urls, 'PROVINCES');
+                arr = pickArray(data);
+            }
 
-            const data = await tryGetWithLog(urls, 'PROVINCES');
-            const arr = pickArray(data);
-
-            const mapped = arr
+            const mapped = (arr || [])
                 .map((x) => ({
                     id:
                         x?.id ??
@@ -397,42 +420,61 @@ export default function HomeScreen() {
 
             setProvinces(mapped);
 
-            if (!mapped.length) setLocError('Không tải được danh sách Tỉnh/Thành (API trả về rỗng).');
+            if (!mapped.length) {
+                const local = (getProvinces() || []).map((x) => ({
+                    id: x?.code ?? x?.id,
+                    name: x?.name ?? x?.title ?? String(x?.code ?? x?.id ?? ''),
+                }));
+                if (local.length) {
+                    setProvinces(local);
+                } else {
+                    setLocError('Không tải được danh sách Tỉnh/Thành (API trả về rỗng).');
+                }
+            }
         } catch {
-            setProvinces([]);
-            setLocError('Không gọi được API Tỉnh/Thành. Xem log: [PROVINCES] FAIL');
+            const local = (getProvinces() || []).map((x) => ({
+                id: x?.code ?? x?.id,
+                name: x?.name ?? x?.title ?? String(x?.code ?? x?.id ?? ''),
+            }));
+            if (local.length) {
+                setProvinces(local);
+            } else {
+                setProvinces([]);
+                setLocError('Không gọi được API Tỉnh/Thành. Xem log: [PROVINCES] FAIL');
+            }
         } finally {
             setLocLoading(false);
         }
     };
 
     const fetchDistricts = async (provinceObj) => {
-        const pid = provinceObj?.id;
+        const pid = provinceObj?.id ?? provinceObj?.code;
         if (!pid) return;
 
         setLocLoading(true);
         setLocError('');
         try {
-            const base = ENDPOINTS?.LOCATIONS_DISTRICTS || ENDPOINTS?.DISTRICTS || '/api/listings/locations/districts';
-            const s = String(base).replace(/\/+$/, '');
-            const bases = [s, `${s}/`];
-
-            const params = [
-                `province_id=${encodeURIComponent(pid)}`,
-                `provinceId=${encodeURIComponent(pid)}`,
-                `province_code=${encodeURIComponent(pid)}`,
-                `province=${encodeURIComponent(pid)}`,
-            ];
-
             let data = null;
-            for (const b of bases) {
-                for (const p of params) {
-                    try {
-                        data = await tryGetWithLog([`${b}?${p}`], 'DISTRICTS');
-                        break;
-                    } catch { }
+            const base = ENDPOINTS?.LOCATIONS_DISTRICTS || ENDPOINTS?.DISTRICTS;
+            if (base) {
+                const s = String(base).replace(/\/+$/, '');
+                const bases = [s, `${s}/`];
+                const params = [
+                    `province_id=${encodeURIComponent(pid)}`,
+                    `provinceId=${encodeURIComponent(pid)}`,
+                    `province_code=${encodeURIComponent(pid)}`,
+                    `province=${encodeURIComponent(pid)}`,
+                ];
+
+                for (const b of bases) {
+                    for (const p of params) {
+                        try {
+                            data = await tryGetWithLog([`${b}?${p}`], 'DISTRICTS');
+                            break;
+                        } catch { }
+                    }
+                    if (data) break;
                 }
-                if (data) break;
             }
 
             const arr = pickArray(data);
@@ -459,42 +501,62 @@ export default function HomeScreen() {
                 .filter((x) => x.id != null && String(x.name).trim() !== '');
 
             setDistricts(mapped);
-            if (!mapped.length) setLocError('Không tải được danh sách Quận/Huyện (API trả về rỗng).');
+            if (!mapped.length) {
+                const local = (getDistrictsByProvinceCode(pid) || []).map((x) => ({
+                    id: x?.code ?? x?.id,
+                    name: x?.name ?? x?.title ?? String(x?.code ?? x?.id ?? ''),
+                }));
+                if (local.length) {
+                    setDistricts(local);
+                } else {
+                    setLocError('Không tải được danh sách Quận/Huyện (API trả về rỗng).');
+                }
+            }
         } catch {
-            setDistricts([]);
-            setLocError('Không gọi được API Quận/Huyện. Xem log: [DISTRICTS] FAIL');
+            const local = (getDistrictsByProvinceCode(pid) || []).map((x) => ({
+                id: x?.code ?? x?.id,
+                name: x?.name ?? x?.title ?? String(x?.code ?? x?.id ?? ''),
+            }));
+            if (local.length) {
+                setDistricts(local);
+            } else {
+                setDistricts([]);
+                setLocError('Không gọi được API Quận/Huyện. Xem log: [DISTRICTS] FAIL');
+            }
         } finally {
             setLocLoading(false);
         }
     };
 
     const fetchWards = async (districtObj) => {
-        const did = districtObj?.id;
+        const did = districtObj?.id ?? districtObj?.code;
         if (!did) return;
 
         setLocLoading(true);
         setLocError('');
         try {
-            const base = ENDPOINTS?.LOCATIONS_WARDS || ENDPOINTS?.WARDS || '/api/listings/locations/wards';
-            const s = String(base).replace(/\/+$/, '');
-            const bases = [s, `${s}/`];
-
-            const params = [
-                `district_id=${encodeURIComponent(did)}`,
-                `districtId=${encodeURIComponent(did)}`,
-                `district_code=${encodeURIComponent(did)}`,
-                `district=${encodeURIComponent(did)}`,
-            ];
-
             let data = null;
-            for (const b of bases) {
-                for (const p of params) {
-                    try {
-                        data = await tryGetWithLog([`${b}?${p}`], 'WARDS');
-                        break;
-                    } catch { }
+            const base = ENDPOINTS?.LOCATIONS_WARDS || ENDPOINTS?.WARDS;
+            if (base) {
+                const s = String(base).replace(/\/+$/, '');
+                const bases = [s, `${s}/`];
+
+                const params = [
+                    `district_id=${encodeURIComponent(did)}`,
+                    `districtId=${encodeURIComponent(did)}`,
+                    `district_code=${encodeURIComponent(did)}`,
+                    `district=${encodeURIComponent(did)}`,
+                ];
+
+                for (const b of bases) {
+                    for (const p of params) {
+                        try {
+                            data = await tryGetWithLog([`${b}?${p}`], 'WARDS');
+                            break;
+                        } catch { }
+                    }
+                    if (data) break;
                 }
-                if (data) break;
             }
 
             const arr = pickArray(data);
@@ -521,10 +583,28 @@ export default function HomeScreen() {
                 .filter((x) => x.id != null && String(x.name).trim() !== '');
 
             setWards(mapped);
-            if (!mapped.length) setLocError('Không tải được danh sách Phường/Xã (API trả về rỗng).');
+            if (!mapped.length) {
+                const local = (getWardsByDistrictCode(did) || []).map((x) => ({
+                    id: x?.code ?? x?.id,
+                    name: x?.name ?? x?.title ?? String(x?.code ?? x?.id ?? ''),
+                }));
+                if (local.length) {
+                    setWards(local);
+                } else {
+                    setLocError('Không tải được danh sách Phường/Xã (API trả về rỗng).');
+                }
+            }
         } catch {
-            setWards([]);
-            setLocError('Không gọi được API Phường/Xã. Xem log: [WARDS] FAIL');
+            const local = (getWardsByDistrictCode(did) || []).map((x) => ({
+                id: x?.code ?? x?.id,
+                name: x?.name ?? x?.title ?? String(x?.code ?? x?.id ?? ''),
+            }));
+            if (local.length) {
+                setWards(local);
+            } else {
+                setWards([]);
+                setLocError('Không gọi được API Phường/Xã. Xem log: [WARDS] FAIL');
+            }
         } finally {
             setLocLoading(false);
         }
@@ -535,6 +615,9 @@ export default function HomeScreen() {
         setLocError('');
         setLocOpen(true);
         if (!provinces?.length) await fetchProvinces();
+        setProvinceOpen(false);
+        setDistrictOpen(false);
+        setWardOpen(false);
     };
 
     const clearLocation = () => {
@@ -545,6 +628,9 @@ export default function HomeScreen() {
         setWards([]);
         setLocSearch('');
         setLocError('');
+        setProvinceOpen(false);
+        setDistrictOpen(false);
+        setWardOpen(false);
     };
 
     const locationLabel = useMemo(() => {
@@ -631,7 +717,7 @@ export default function HomeScreen() {
 
         return list.filter((p) => {
             const title = normalizeText(p?.title);
-            const addr = normalizeText(addressMap?.[p?.id] || '');
+            const addr = getPostLocationText(p);
             const okText = !query ? true : title.includes(query) || addr.includes(query);
             const okLoc = !lq ? true : addr.includes(lq);
             return okText && okLoc;
@@ -930,44 +1016,73 @@ export default function HomeScreen() {
                             ) : (
                                 <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
                                     <Text style={styles.locStepTitle}>1) Tỉnh/Thành</Text>
-
-                                    <FlatList
-                                        data={locFilteredList(provinces)}
-                                        keyExtractor={(x, idx) => String(x?.id ?? idx)}
-                                        horizontal
-                                        showsHorizontalScrollIndicator={false}
-                                        renderItem={({ item }) => {
-                                            const active = String(item?.id) === String(province?.id);
-                                            return (
-                                                <TouchableOpacity
-                                                    style={[styles.locPill, active && styles.locPillActive]}
-                                                    onPress={async () => {
-                                                        setProvince(item);
-                                                        setDistrict(null);
-                                                        setWard(null);
-                                                        setDistricts([]);
-                                                        setWards([]);
-                                                        setLocSearch('');
-                                                        await fetchDistricts(item);
-                                                    }}
-                                                    activeOpacity={0.9}
-                                                >
-                                                    <Text style={[styles.locPillText, active && styles.locPillTextActive]} numberOfLines={1}>
-                                                        {item?.name}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            );
+                                    <TouchableOpacity
+                                        style={styles.locFieldHeader}
+                                        onPress={async () => {
+                                            const next = !provinceOpen;
+                                            setProvinceOpen(next);
+                                            if (next && !provinces.length) await fetchProvinces();
                                         }}
-                                        ListEmptyComponent={<Text style={{ color: '#999' }}>Không có dữ liệu Tỉnh/Thành</Text>}
-                                    />
+                                        activeOpacity={0.9}
+                                    >
+                                        <Text style={styles.locFieldLabel}>{province?.name || 'Chọn Tỉnh/Thành'}</Text>
+                                        <Ionicons name={provinceOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#111" />
+                                    </TouchableOpacity>
+                                    {provinceOpen ? (
+                                        <FlatList
+                                            data={locFilteredList(provinces)}
+                                            keyExtractor={(x, idx) => String(x?.id ?? idx)}
+                                            style={styles.locList}
+                                            showsVerticalScrollIndicator
+                                            renderItem={({ item }) => {
+                                                const active = String(item?.id) === String(province?.id);
+                                                return (
+                                                    <TouchableOpacity
+                                                        style={[styles.locPill, active && styles.locPillActive]}
+                                                        onPress={async () => {
+                                                            setProvince(item);
+                                                            setDistrict(null);
+                                                            setWard(null);
+                                                            setDistricts([]);
+                                                            setWards([]);
+                                                            setLocSearch('');
+                                                            setProvinceOpen(false);
+                                                            setDistrictOpen(true);
+                                                            setWardOpen(false);
+                                                            await fetchDistricts(item);
+                                                        }}
+                                                        activeOpacity={0.9}
+                                                    >
+                                                        <Text style={[styles.locPillText, active && styles.locPillTextActive]} numberOfLines={1}>
+                                                            {item?.name}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                );
+                                            }}
+                                            ListEmptyComponent={<Text style={{ color: '#999' }}>Không có dữ liệu Tỉnh/Thành</Text>}
+                                        />
+                                    ) : null}
 
                                     <Text style={styles.locStepTitle}>2) Quận/Huyện</Text>
-                                    {province ? (
+                                    <TouchableOpacity
+                                        style={[styles.locFieldHeader, !province && styles.locFieldHeaderDisabled]}
+                                        onPress={async () => {
+                                            if (!province) return;
+                                            const next = !districtOpen;
+                                            setDistrictOpen(next);
+                                            if (next && !districts.length) await fetchDistricts(province);
+                                        }}
+                                        activeOpacity={0.9}
+                                    >
+                                        <Text style={styles.locFieldLabel}>{district?.name || 'Chọn Quận/Huyện'}</Text>
+                                        <Ionicons name={districtOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#111" />
+                                    </TouchableOpacity>
+                                    {districtOpen ? (
                                         <FlatList
                                             data={locFilteredList(districts)}
                                             keyExtractor={(x, idx) => String(x?.id ?? idx)}
-                                            horizontal
-                                            showsHorizontalScrollIndicator={false}
+                                            style={styles.locList}
+                                            showsVerticalScrollIndicator
                                             renderItem={({ item }) => {
                                                 const active = String(item?.id) === String(district?.id);
                                                 return (
@@ -978,6 +1093,8 @@ export default function HomeScreen() {
                                                             setWard(null);
                                                             setWards([]);
                                                             setLocSearch('');
+                                                            setDistrictOpen(false);
+                                                            setWardOpen(true);
                                                             await fetchWards(item);
                                                         }}
                                                         activeOpacity={0.9}
@@ -990,17 +1107,28 @@ export default function HomeScreen() {
                                             }}
                                             ListEmptyComponent={<Text style={{ color: '#999' }}>Không có dữ liệu Quận/Huyện</Text>}
                                         />
-                                    ) : (
-                                        <Text style={{ color: '#999', marginBottom: 8 }}>Chọn Tỉnh/Thành trước</Text>
-                                    )}
+                                    ) : null}
 
                                     <Text style={styles.locStepTitle}>3) Phường/Xã</Text>
-                                    {district ? (
+                                    <TouchableOpacity
+                                        style={[styles.locFieldHeader, !district && styles.locFieldHeaderDisabled]}
+                                        onPress={async () => {
+                                            if (!district) return;
+                                            const next = !wardOpen;
+                                            setWardOpen(next);
+                                            if (next && !wards.length) await fetchWards(district);
+                                        }}
+                                        activeOpacity={0.9}
+                                    >
+                                        <Text style={styles.locFieldLabel}>{ward?.name || 'Chọn Phường/Xã'}</Text>
+                                        <Ionicons name={wardOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#111" />
+                                    </TouchableOpacity>
+                                    {wardOpen ? (
                                         <FlatList
                                             data={locFilteredList(wards)}
                                             keyExtractor={(x, idx) => String(x?.id ?? idx)}
-                                            horizontal
-                                            showsHorizontalScrollIndicator={false}
+                                            style={styles.locList}
+                                            showsVerticalScrollIndicator
                                             renderItem={({ item }) => {
                                                 const active = String(item?.id) === String(ward?.id);
                                                 return (
@@ -1009,7 +1137,7 @@ export default function HomeScreen() {
                                                         onPress={() => {
                                                             setWard(item);
                                                             setLocSearch('');
-                                                            setTimeout(() => setLocOpen(false), 200);
+                                                            setWardOpen(false);
                                                         }}
                                                         activeOpacity={0.9}
                                                     >
@@ -1021,9 +1149,7 @@ export default function HomeScreen() {
                                             }}
                                             ListEmptyComponent={<Text style={{ color: '#999' }}>Không có dữ liệu Phường/Xã</Text>}
                                         />
-                                    ) : (
-                                        <Text style={{ color: '#999' }}>Chọn Quận/Huyện trước</Text>
-                                    )}
+                                    ) : null}
                                 </View>
                             )}
 
@@ -1305,6 +1431,27 @@ const styles = StyleSheet.create({
     locPillActive: { backgroundColor: '#111', borderColor: '#111' },
     locPillText: { color: '#111', fontWeight: '800', maxWidth: 220 },
     locPillTextActive: { color: '#fff' },
+
+    locList: {
+        maxHeight: 180,
+        paddingBottom: 4,
+    },
+    locFieldHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#e6e6e6',
+        backgroundColor: '#fff',
+        marginBottom: 8,
+    },
+    locFieldHeaderDisabled: {
+        opacity: 0.5,
+    },
+    locFieldLabel: { fontWeight: '800', color: '#111' },
 
     locModalBottom: { padding: 12, borderTopWidth: 1, borderTopColor: '#eee' },
     locApplyBtn: { height: 46, borderRadius: 14, backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' },
