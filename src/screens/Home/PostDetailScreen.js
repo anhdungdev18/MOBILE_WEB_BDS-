@@ -903,13 +903,18 @@ export default function PostDetailScreen() {
                                 </View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={styles.ownerLabel}>Người đăng</Text>
-                                    <Text style={styles.ownerName} numberOfLines={1}>
+                                    <Text style={styles.ownerName} numberOfLines={2}>
                                         {ownerLoading ? 'Đang tải...' : ownerName}
                                     </Text>
                                 </View>
                             </TouchableOpacity>
 
                             <View style={styles.ownerActions}>
+                                <TouchableOpacity activeOpacity={0.85} style={styles.chatBtn} onPress={startChat}>
+                                    <Ionicons name="chatbubble-ellipses-outline" size={18} color="#111" />
+                                    <Text style={styles.chatText}>Nhắn tin</Text>
+                                </TouchableOpacity>
+
                                 {(owner?.phone || owner?.email) && (
                                     <TouchableOpacity
                                         onPress={() => {
@@ -925,11 +930,6 @@ export default function PostDetailScreen() {
                                         <Text style={styles.contactText}>Liên hệ</Text>
                                     </TouchableOpacity>
                                 )}
-
-                                <TouchableOpacity activeOpacity={0.85} style={styles.chatBtn} onPress={startChat}>
-                                    <Ionicons name="chatbubble-ellipses-outline" size={18} color="#111" />
-                                    <Text style={styles.chatText}>Nhắn tin</Text>
-                                </TouchableOpacity>
                             </View>
                         </View>
 
@@ -1296,7 +1296,7 @@ const styles = StyleSheet.create({
     ownerLabel: { color: '#6b7280', fontWeight: '800', fontSize: 12 },
     ownerName: { color: '#111', fontWeight: '900', fontSize: 16, marginTop: 2 },
 
-    ownerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    ownerActions: { flexDirection: 'column', alignItems: 'flex-end', gap: 8 },
     contactBtn: {
         backgroundColor: '#f3f4f6',
         paddingHorizontal: 12,
