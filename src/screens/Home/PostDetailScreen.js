@@ -881,7 +881,19 @@ export default function PostDetailScreen() {
 
                         {/* ✅ Người đăng */}
                         <View style={styles.ownerCard}>
-                            <View style={styles.ownerLeft}>
+                            <TouchableOpacity
+                                style={styles.ownerLeft}
+                                activeOpacity={0.85}
+                                onPress={() => {
+                                    const ownerId = owner?.id || post?.owner_id || post?.ownerId || post?.owner;
+                                    if (!ownerId) return;
+                                    navigation.navigate('OwnerProfile', {
+                                        ownerId,
+                                        ownerName,
+                                        ownerAvatar,
+                                    });
+                                }}
+                            >
                                 <View style={styles.avatar}>
                                     {ownerAvatar ? (
                                         <Image source={{ uri: ownerAvatar }} style={styles.avatarImage} />
@@ -895,7 +907,7 @@ export default function PostDetailScreen() {
                                         {ownerLoading ? 'Đang tải...' : ownerName}
                                     </Text>
                                 </View>
-                            </View>
+                            </TouchableOpacity>
 
                             <View style={styles.ownerActions}>
                                 {(owner?.phone || owner?.email) && (
