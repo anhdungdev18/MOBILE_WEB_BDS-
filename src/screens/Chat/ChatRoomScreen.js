@@ -17,6 +17,28 @@ import {
 import client from '../../api/client';
 import { ENDPOINTS } from '../../api/endpoints';
 
+function formatPriceVn(value) {
+    if (value == null || Number.isNaN(Number(value))) return '—';
+    try {
+        return new Intl.NumberFormat('vi-VN').format(Number(value));
+    } catch {
+        return String(value);
+    }
+}
+
+function addressToText(address) {
+    if (!address) return '';
+    if (typeof address === 'object') {
+        const full = address.full || address.text || address.address;
+        if (full) return String(full).trim();
+        const joined = [address.street, address.ward, address.district, address.province]
+            .filter(Boolean)
+            .join(', ');
+        return joined.trim();
+    }
+    return String(address).trim();
+}
+
 function buildWsUrl(roomId, token) {
     const base = client?.defaults?.baseURL || '';
     if (!base) return null;
@@ -38,6 +60,7 @@ export default function ChatRoomScreen() {
     const navigation = useNavigation();
     const route = useRoute();
     const roomId = route?.params?.roomId;
+    const initialListingId = route?.params?.listingId;
     const otherUserName = route?.params?.otherUserName || 'Trò chuyện';
 
     const [messages, setMessages] = useState([]);
@@ -45,6 +68,9 @@ export default function ChatRoomScreen() {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [connecting, setConnecting] = useState(false);
+    const [listing, setListing] = useState(null);
+    const [listingLoading, setListingLoading] = useState(false);
+    const [listingId, setListingId] = useState(initialListingId || null);
 
     const socketRef = useRef(null);
     const listRef = useRef(null);
@@ -73,6 +99,33 @@ export default function ChatRoomScreen() {
             setMessages([]);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadListing = async () => {
+        if (!listingId) return;
+        try {
+            setListingLoading(true);
+            const res = await client.get(ENDPOINTS.POST_DETAIL(listingId));
+            const data = res?.data?.result || res?.data;
+            setListing(data || null);
+        } catch {
+            setListing(null);
+        } finally {
+            setListingLoading(false);
+        }
+    };
+
+    const loadRoomListingId = async () => {
+        if (!roomId || listingId) return;
+        try {
+            const res = await client.get(ENDPOINTS.CHAT_ROOMS_MY);
+            const list = res?.data?.rooms || [];
+            const matched = (list || []).find((r) => String(r?.room_id || r?.id) === String(roomId));
+            const foundId = matched?.listing_id || matched?.listingId;
+            if (foundId) setListingId(foundId);
+        } catch {
+            // ignore
         }
     };
 
@@ -154,10 +207,15 @@ export default function ChatRoomScreen() {
         loadMe();
         loadMessages();
         connectWs();
+        loadRoomListingId();
         return () => {
             if (socketRef.current) socketRef.current.close();
         };
     }, [roomId]);
+
+    useEffect(() => {
+        loadListing();
+    }, [listingId]);
 
     useEffect(() => {
         if (!messages.length) return;
@@ -165,6 +223,17 @@ export default function ChatRoomScreen() {
     }, [messages.length]);
 
     const title = useMemo(() => otherUserName || 'Trò chuyện', [otherUserName]);
+    const listingTitle = listing?.title || 'Tin bạn quan tâm';
+    const listingPrice = listing?.price != null ? formatPriceVn(listing.price) : '—';
+    const listingArea = listing?.area != null ? `${listing.area} m²` : null;
+    const listingAddress = addressToText(listing?.address || listing?.location);
+    const openListing = () => {
+        if (!listingId) return;
+        navigation.navigate('Trang chủ', {
+            screen: 'PostDetail',
+            params: { postId: listingId, id: listingId },
+        });
+    };
 
     return (
         <KeyboardAvoidingView
@@ -192,6 +261,32 @@ export default function ChatRoomScreen() {
                     data={messages}
                     keyExtractor={(item) => String(item?.id)}
                     contentContainerStyle={styles.listContent}
+                    ListHeaderComponent={
+                        listingId ? (
+                            <TouchableOpacity
+                                activeOpacity={0.85}
+                                onPress={openListing}
+                                style={styles.listingCard}
+                            >
+                                <View style={styles.listingRow}>
+                                    <Ionicons name="home-outline" size={18} color="#111" />
+                                    <Text style={styles.listingTitle} numberOfLines={2}>
+                                        {listingLoading ? 'Đang tải tin...' : listingTitle}
+                                    </Text>
+                                </View>
+                                <View style={styles.listingMetaRow}>
+                                    <Text style={styles.listingMeta}>{listingPrice}</Text>
+                                    {listingArea ? <Text style={styles.listingMeta}>{listingArea}</Text> : null}
+                                </View>
+                                {listingAddress ? (
+                                    <Text style={styles.listingAddress} numberOfLines={2}>
+                                        {listingAddress}
+                                    </Text>
+                                ) : null}
+                                <Text style={styles.listingLink}>Xem chi tiết</Text>
+                            </TouchableOpacity>
+                        ) : null
+                    }
                     renderItem={({ item }) => {
                         const isMine = meId && String(item?.sender_id) === String(meId);
                         const timeText = item?.created_at ? new Date(item.created_at).toLocaleString() : '';
@@ -242,6 +337,20 @@ const styles = StyleSheet.create({
     headerTitle: { flex: 1, fontSize: 16, fontWeight: '800', color: '#111' },
     loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     listContent: { paddingHorizontal: 16, paddingVertical: 16, gap: 10 },
+    listingCard: {
+        borderWidth: 1,
+        borderColor: '#EEE',
+        borderRadius: 14,
+        padding: 12,
+        backgroundColor: '#fff',
+        marginBottom: 6,
+    },
+    listingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    listingTitle: { flex: 1, fontSize: 14, fontWeight: '800', color: '#111' },
+    listingMetaRow: { flexDirection: 'row', gap: 12, marginTop: 6 },
+    listingMeta: { fontSize: 12, fontWeight: '800', color: '#111' },
+    listingAddress: { fontSize: 12, color: '#666', marginTop: 4 },
+    listingLink: { marginTop: 8, fontSize: 12, fontWeight: '800', color: '#111' },
     bubble: {
         maxWidth: '78%',
         paddingHorizontal: 12,

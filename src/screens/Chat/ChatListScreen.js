@@ -128,6 +128,7 @@ export default function ChatListScreen() {
     const openRoom = (room) => {
         const roomId = room?.room_id || room?.id;
         if (!roomId) return;
+        const listingId = room?.listing_id || room?.listingId;
         const otherId = room?.buyer_id === meId ? room?.seller_id : room?.buyer_id;
         const other = otherId ? userMap?.[otherId] : null;
         const displayName =
@@ -140,6 +141,7 @@ export default function ChatListScreen() {
             roomId,
             otherUserId: otherId,
             otherUserName: displayName,
+            listingId,
         });
     };
 

@@ -444,6 +444,7 @@ export default function PostDetailScreen() {
                     roomId,
                     otherUserId: ownerId,
                     otherUserName: ownerName,
+                    listingId: postId,
                 },
             });
         } catch (e) {
