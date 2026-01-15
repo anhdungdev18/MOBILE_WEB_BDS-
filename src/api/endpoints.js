@@ -30,6 +30,11 @@ export const ENDPOINTS = {
     CHAT_ROOMS_MY: '/api/rooms/my/',
     CHAT_ROOM_MESSAGES: (roomId) => `/api/rooms/${roomId}/messages/`,
 
+    // Notifications
+    NOTIFICATIONS: '/api/notifications/',
+    NOTIFICATIONS_UNREAD: '/api/notifications/unread-count/',
+    NOTIFICATIONS_MARK_READ: '/api/notifications/mark-read/',
+
     FAVORITES_TOGGLE: '/api/engagement/favorites/toggle/',
     FAVORITES_MY: '/api/engagement/favorites/my/',
 

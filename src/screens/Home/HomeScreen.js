@@ -1,7 +1,7 @@
 // src/screens/Home/HomeScreen.js
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -23,6 +23,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import apiClient from '../../api/client';
 import { ENDPOINTS } from '../../api/endpoints';
+import { AuthContext } from '../../context/AuthContext';
 import {
     getDistrictsByProvinceCode,
     getProvinces,
@@ -81,6 +82,7 @@ export default function HomeScreen() {
 
     // ✅ Notifications placeholder
     const [unreadCount, setUnreadCount] = useState(0);
+    const { userToken } = useContext(AuthContext);
 
     // ✅ Lazy load
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -684,12 +686,27 @@ export default function HomeScreen() {
         }
     };
 
+    const loadUnreadCount = async () => {
+        if (!userToken) {
+            setUnreadCount(0);
+            return;
+        }
+        try {
+            const res = await apiClient.get(ENDPOINTS.NOTIFICATIONS_UNREAD);
+            const count = res?.data?.unread ?? 0;
+            setUnreadCount(Number(count) || 0);
+        } catch {
+            setUnreadCount(0);
+        }
+    };
+
     useEffect(() => {
         if (isFocused) {
             fetchPosts();
             fetchCategories();
+            loadUnreadCount();
         }
-    }, [isFocused]);
+    }, [isFocused, userToken]);
 
     const onRefresh = async () => {
         try {
@@ -884,9 +901,7 @@ export default function HomeScreen() {
                     <TouchableOpacity style={styles.bellBtn} onPress={onPressBell} activeOpacity={0.85}>
                         <Ionicons name="notifications-outline" size={22} color="#111" />
                         {unreadCount > 0 ? (
-                            <View style={styles.badgeDot}>
-                                <Text style={styles.badgeDotText}>{unreadCount > 99 ? '99+' : String(unreadCount)}</Text>
-                            </View>
+                            <View style={styles.badgeDot} />
                         ) : null}
                     </TouchableOpacity>
                 </View>
@@ -1252,12 +1267,16 @@ const styles = StyleSheet.create({
         justifyContent: 'center', alignItems: 'center',
     },
     badgeDot: {
-        position: 'absolute', top: 4, right: 4,
-        minWidth: 18, height: 18, paddingHorizontal: 4,
-        borderRadius: 9, backgroundColor: '#E53935',
-        justifyContent: 'center', alignItems: 'center',
+        position: 'absolute',
+        top: 6,
+        right: 6,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#E53935',
+        borderWidth: 2,
+        borderColor: '#fff',
     },
-    badgeDotText: { color: '#fff', fontSize: 10, fontWeight: '900' },
 
     searchRow: {
         marginTop: 10,
