@@ -59,6 +59,7 @@ export default function HomeScreen() {
     // ✅ ADDRESS CACHE (lấy từ API detail)
     const [addressMap, setAddressMap] = useState({}); // { postId: "địa chỉ" }
     const fetchingAddressRef = useRef(new Set()); // chống gọi trùng
+    const vipKeyLoggedRef = useRef(false);
 
     // SEARCH (tiêu đề/địa chỉ)
     const [q, setQ] = useState('');
@@ -840,6 +841,10 @@ export default function HomeScreen() {
     /* ================= UI ================= */
 
     const renderPost = ({ item }) => {
+        if (!vipKeyLoggedRef.current && item && typeof item === 'object') {
+            vipKeyLoggedRef.current = true;
+            console.log('[HomeScreen] post keys:', Object.keys(item));
+        }
         const txId = getTxTypeId(item);
         const priceVal = item?.priceValue ?? item?.price_value ?? item?.price ?? null;
         const isFav = Number(favMap?.[item?.id]) === 1;

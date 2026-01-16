@@ -26,6 +26,7 @@ export default function PostCard({ post, onPress, favMap, categoryName, onToggle
 
     const images = post?.images || [];
     const thumb = images?.length > 0 ? images[0]?.url || images[0]?.image_url || images[0] : null;
+    const isVip = Boolean(post?.owner_is_agent);
 
     const isFav = !!favMap?.[String(post?.id)];
 
@@ -40,6 +41,11 @@ export default function PostCard({ post, onPress, favMap, categoryName, onToggle
                         <Ionicons name="image-outline" size={28} color="#999" />
                     </View>
                 )}
+                {isVip ? (
+                    <View style={styles.vipBadge}>
+                        <Ionicons name="crown" size={14} color="#C58B00" />
+                    </View>
+                ) : null}
             </View>
 
             {/* Content */}
@@ -95,9 +101,23 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         overflow: 'hidden',
         backgroundColor: '#F3F3F3',
+        position: 'relative',
     },
     image: { width: '100%', height: '100%' },
     imagePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    vipBadge: {
+        position: 'absolute',
+        top: 8,
+        left: 8,
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#FFE8A3',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#F3C85A',
+    },
 
     content: { marginTop: 10 },
 

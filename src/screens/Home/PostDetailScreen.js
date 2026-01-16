@@ -760,6 +760,7 @@ export default function PostDetailScreen() {
             : post?.owner && typeof post.owner === 'object'
                 ? post.owner
                 : null;
+    const isVipPost = Boolean(post?.owner_is_agent || ownerProfile?.owner_is_agent || owner?.owner_is_agent);
     const ownerData = ownerProfile || {
         owner_first_name: post?.owner_first_name,
         owner_last_name: post?.owner_last_name,
@@ -881,6 +882,11 @@ export default function PostDetailScreen() {
 
                         {/* ✅ Người đăng */}
                         <View style={styles.ownerCard}>
+                            {isVipPost ? (
+                                <View style={styles.vipBadge}>
+                                    <Ionicons name="crown" size={14} color="#C58B00" />
+                                </View>
+                            ) : null}
                             <TouchableOpacity
                                 style={styles.ownerLeft}
                                 activeOpacity={0.85}
@@ -1282,6 +1288,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 10,
+        position: 'relative',
     },
     ownerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
     avatar: {
@@ -1297,6 +1304,19 @@ const styles = StyleSheet.create({
     ownerName: { color: '#111', fontWeight: '900', fontSize: 16, marginTop: 2 },
 
     ownerActions: { flexDirection: 'column', alignItems: 'flex-end', gap: 8 },
+    vipBadge: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#FFE8A3',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#F3C85A',
+    },
     contactBtn: {
         backgroundColor: '#f3f4f6',
         paddingHorizontal: 12,
