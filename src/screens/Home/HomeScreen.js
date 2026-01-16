@@ -729,15 +729,65 @@ export default function HomeScreen() {
 
     /* ================= FETCH POSTS ================= */
 
+    const getPayloadTotal = (payload) => {
+        const candidates = [
+            payload?.count,
+            payload?.total,
+            payload?.total_items,
+            payload?.totalItems,
+            payload?.total_results,
+            payload?.totalResults,
+        ];
+        for (const v of candidates) {
+            const n = Number(v);
+            if (Number.isFinite(n)) return n;
+        }
+        return null;
+    };
+
     const fetchPosts = async () => {
         try {
             setLoading(true);
 
-            const url = (ENDPOINTS?.POSTS || '/api/listings/posts').replace(/\/+$/, '');
-            const res = await apiClient.get(url);
+            const baseUrl = (ENDPOINTS?.POSTS || '/api/listings/posts').replace(/\/+$/, '');
+            const pageSize = 100;
+            let url = baseUrl;
+            let page = 1;
+            let params = { page, page_size: pageSize };
+            let allPosts = [];
+            const seen = new Set();
+            let guard = 0;
 
-            const data = Array.isArray(res.data) ? res.data : res.data?.results || [];
-            const approvedOnly = data.filter((p) => isApproved(p) && !isHidden(p));
+            while (url && !seen.has(url) && guard < 20) {
+                seen.add(url);
+                const res = await apiClient.get(url, params ? { params } : undefined);
+                const payload = res?.data;
+                const items = pickArray(payload);
+
+                if (Array.isArray(payload)) {
+                    allPosts = items;
+                    url = null;
+                    break;
+                }
+
+                allPosts = allPosts.concat(items);
+                if (payload?.next) {
+                    url = payload.next;
+                    params = null;
+                } else {
+                    const total = getPayloadTotal(payload);
+                    if (Number.isFinite(total) && allPosts.length < total && items.length) {
+                        page += 1;
+                        url = baseUrl;
+                        params = { page, page_size: pageSize };
+                    } else {
+                        url = null;
+                    }
+                }
+                guard += 1;
+            }
+
+            const approvedOnly = allPosts.filter((p) => isApproved(p) && !isHidden(p));
 
             setPosts(approvedOnly);
 
