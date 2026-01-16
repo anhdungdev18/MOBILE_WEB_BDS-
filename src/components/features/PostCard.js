@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+const kingIcon = require('../../../assets/images/king.png');
+
 const formatPrice = (price) => {
     if (price == null) return '—';
     try {
@@ -32,6 +34,11 @@ export default function PostCard({ post, onPress, favMap, categoryName, onToggle
 
     return (
         <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
+            {isVip ? (
+                <View style={styles.vipBadge}>
+                    <Image source={kingIcon} style={styles.vipCrown} resizeMode="contain" />
+                </View>
+            ) : null}
             {/* Image */}
             <View style={styles.imageWrap}>
                 {thumb ? (
@@ -41,11 +48,6 @@ export default function PostCard({ post, onPress, favMap, categoryName, onToggle
                         <Ionicons name="image-outline" size={28} color="#999" />
                     </View>
                 )}
-                {isVip ? (
-                    <View style={styles.vipBadge}>
-                        <Ionicons name="crown" size={14} color="#C58B00" />
-                    </View>
-                ) : null}
             </View>
 
             {/* Content */}
@@ -107,16 +109,19 @@ const styles = StyleSheet.create({
     imagePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     vipBadge: {
         position: 'absolute',
-        top: 8,
-        left: 8,
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: '#FFE8A3',
+        top: -12,
+        left: -14,
+        width: 78,
+        height: 54,
+        backgroundColor: 'transparent',
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: '#F3C85A',
+        zIndex: 5,
+    },
+    vipCrown: {
+        width: 78,
+        height: 54,
+        transform: [{ rotate: '-45deg' }],
     },
 
     content: { marginTop: 10 },
