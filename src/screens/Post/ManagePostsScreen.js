@@ -369,7 +369,7 @@ export default function ManagePostsScreen() {
     };
 
     return (
-        <SafeAreaView style={[styles.container, { paddingTop: Math.max(insets.top, 8) }]} edges={["top", "left", "right"]}>
+        <SafeAreaView style={[styles.container, { paddingTop: Math.max(insets.top - 20, 0) }]} edges={["top", "left", "right"]}>
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Quản lý tin</Text>
             </View>

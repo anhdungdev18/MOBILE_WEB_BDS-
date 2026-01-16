@@ -100,6 +100,8 @@ export default function HomeScreen() {
 
     // SEARCH (tiêu đề/địa chỉ)
     const [q, setQ] = useState('');
+    const [priceMin, setPriceMin] = useState('');
+    const [priceMax, setPriceMax] = useState('');
 
     // ✅ LOCATION FILTER (Tỉnh/Quận/Phường)
     const [locOpen, setLocOpen] = useState(false);
@@ -139,6 +141,35 @@ export default function HomeScreen() {
     /* ================= HELPERS ================= */
 
     const normalizeText = (s) => (s ?? '').toString().trim().toLowerCase();
+
+    const parsePriceInput = (value) => {
+        const raw = String(value ?? '').trim();
+        if (!raw) return null;
+        const num = Number(raw.replace(/[^\d]/g, ''));
+        return Number.isFinite(num) ? num : null;
+    };
+
+    const formatNumberInput = (value) => {
+        const digits = String(value ?? '').replace(/[^\d]/g, '');
+        if (!digits) return '';
+        return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    };
+
+    const parsePriceValue = (value) => {
+        if (value == null || value === '') return null;
+        if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+
+        const s = String(value).trim().toLowerCase();
+        if (!s) return null;
+
+        const digits = Number(s.replace(/[^\d]/g, ''));
+        if (!Number.isFinite(digits)) return null;
+
+        if (s.includes('ty') || s.includes('tỷ')) return digits * 1e9;
+        if (s.includes('trieu') || s.includes('triệu')) return digits * 1e6;
+        if (s.includes('ngan') || s.includes('ngàn') || s.includes('nghin') || s.includes('nghìn')) return digits * 1e3;
+        return digits;
+    };
 
     const getTxTypeId = (p) => {
         const candidates = [
@@ -767,21 +798,26 @@ export default function HomeScreen() {
 
         const query = normalizeText(q);
         const lq = locationQuery;
+        const minPrice = parsePriceInput(priceMin);
+        const maxPrice = parsePriceInput(priceMax);
 
-        if (!query && !lq) return list;
+        if (!query && !lq && !minPrice && !maxPrice) return list;
 
         return list.filter((p) => {
             const title = normalizeText(p?.title);
             const addr = getPostLocationText(p);
             const okText = !query ? true : title.includes(query) || addr.includes(query);
             const okLoc = !lq ? true : addr.includes(lq);
-            return okText && okLoc;
+            const priceValue = parsePriceValue(p?.priceValue ?? p?.price_value ?? p?.price ?? null);
+            const okMin = minPrice == null ? true : priceValue != null && priceValue >= minPrice;
+            const okMax = maxPrice == null ? true : priceValue != null && priceValue <= maxPrice;
+            return okText && okLoc && okMin && okMax;
         });
-    }, [posts, txFilter, q, addressMap, locationQuery]);
+    }, [posts, txFilter, q, addressMap, locationQuery, priceMin, priceMax]);
 
     useEffect(() => {
         setVisibleCount(PAGE_SIZE);
-    }, [txFilter, q, locationQuery, posts.length]);
+    }, [txFilter, q, locationQuery, priceMin, priceMax, posts.length]);
 
     const visiblePosts = useMemo(() => filteredPosts.slice(0, visibleCount), [filteredPosts, visibleCount]);
     const canLoadMore = visibleCount < filteredPosts.length;
@@ -947,7 +983,7 @@ export default function HomeScreen() {
 
     return (
         <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-            <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+            <View style={[styles.header, { paddingTop: Math.max(insets.top - 30, 0) }]}>
                 {/* TOP ROW: Title + Bell */}
                 <View style={styles.headerTop}>
                     <Text style={styles.h1}>Trang chủ</Text>
@@ -969,6 +1005,38 @@ export default function HomeScreen() {
                             <Ionicons name="close" size={18} color="#666" />
                         </TouchableOpacity>
                     )}
+                </View>
+
+                <View style={styles.priceRow}>
+                    <Ionicons name="cash-outline" size={18} color="#666" />
+                    <TextInput
+                        value={priceMin}
+                        onChangeText={(text) => setPriceMin(formatNumberInput(text))}
+                        placeholder="Giá từ (VND)"
+                        keyboardType="numeric"
+                        style={styles.priceInput}
+                        returnKeyType="next"
+                    />
+                    <Text style={styles.priceDash}>-</Text>
+                    <TextInput
+                        value={priceMax}
+                        onChangeText={(text) => setPriceMax(formatNumberInput(text))}
+                        placeholder="Giá đến (VND)"
+                        keyboardType="numeric"
+                        style={styles.priceInput}
+                        returnKeyType="search"
+                    />
+                    {(priceMin || priceMax) ? (
+                        <TouchableOpacity
+                            onPress={() => {
+                                setPriceMin('');
+                                setPriceMax('');
+                            }}
+                            style={styles.clearBtn}
+                        >
+                            <Ionicons name="close" size={18} color="#666" />
+                        </TouchableOpacity>
+                    ) : null}
                 </View>
 
                 {/* Location filter button */}
@@ -1340,7 +1408,7 @@ const styles = StyleSheet.create({
 
     header: {
         paddingHorizontal: 14,
-        paddingBottom: 10,
+        paddingBottom: 6,
         borderBottomWidth: 1,
         borderBottomColor: '#eee',
         backgroundColor: '#fff',
@@ -1367,7 +1435,7 @@ const styles = StyleSheet.create({
     },
 
     searchRow: {
-        marginTop: 10,
+        marginTop: 6,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
@@ -1381,7 +1449,22 @@ const styles = StyleSheet.create({
     searchInput: { flex: 1, paddingVertical: 2 },
     clearBtn: { padding: 4 },
 
-    locRow: { marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
+    priceRow: {
+        marginTop: 6,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        borderWidth: 1,
+        borderColor: '#e6e6e6',
+        borderRadius: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        backgroundColor: '#fafafa',
+    },
+    priceInput: { flex: 1, paddingVertical: 2 },
+    priceDash: { color: '#666', fontWeight: '800' },
+
+    locRow: { marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 8 },
     locBtn: {
         flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
         borderWidth: 1, borderColor: '#e6e6e6', borderRadius: 12,
@@ -1394,8 +1477,8 @@ const styles = StyleSheet.create({
         justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff',
     },
 
-    filters: { flexDirection: 'row', marginTop: 10, gap: 8 },
-    hint: { marginTop: 8, color: '#666', fontSize: 12 },
+    filters: { flexDirection: 'row', marginTop: 6, gap: 8 },
+    hint: { marginTop: 6, color: '#666', fontSize: 12 },
 
     chip: {
         paddingHorizontal: 12,
