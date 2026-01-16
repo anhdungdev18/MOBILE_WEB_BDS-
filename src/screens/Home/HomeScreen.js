@@ -89,6 +89,8 @@ export default function HomeScreen() {
 
     // ✅ CATEGORY MAP: category_id -> name (Loại BĐS)
     const [categoryMap, setCategoryMap] = useState({});
+    const [categories, setCategories] = useState([]);
+    const [categoryFilter, setCategoryFilter] = useState('ALL');
 
     // ✅ FAVORITES
     const [favMap, setFavMap] = useState({}); // { postId: 1/0 }
@@ -108,6 +110,11 @@ export default function HomeScreen() {
     const [locLoading, setLocLoading] = useState(false);
     const [locSearch, setLocSearch] = useState('');
     const [locError, setLocError] = useState('');
+    const [catOpen, setCatOpen] = useState(false);
+    const [catSearch, setCatSearch] = useState('');
+    const [txOpen, setTxOpen] = useState(false);
+    const [txSearch, setTxSearch] = useState('');
+    const [filterOpen, setFilterOpen] = useState(false);
 
     const [provinces, setProvinces] = useState([]);
     const [districts, setDistricts] = useState([]);
@@ -186,6 +193,21 @@ export default function HomeScreen() {
         ];
         for (const v of candidates) {
             if (v !== null && v !== undefined && v !== '') return Number(v);
+        }
+        return null;
+    };
+
+    const getCategoryId = (p) => {
+        const candidates = [
+            p?.category_id,
+            p?.categoryId,
+            p?.category_code,
+            p?.category?.id,
+            p?.category?.category_id,
+            p?.category,
+        ];
+        for (const v of candidates) {
+            if (v !== null && v !== undefined && v !== '') return String(v);
         }
         return null;
     };
@@ -407,14 +429,20 @@ export default function HomeScreen() {
                 Array.isArray(data) ? data : data?.results || data?.items || data?.result || data?.data || [];
 
             const map = {};
-            (arr || []).forEach((c) => {
-                const id = c?.id ?? c?.category_id ?? c?.code;
-                const name = c?.name ?? c?.category_name ?? c?.title;
-                if (id != null) map[String(id)] = name ? String(name) : String(id);
-            });
+            const list = (arr || [])
+                .map((c) => {
+                    const id = c?.id ?? c?.category_id ?? c?.code;
+                    const name = c?.name ?? c?.category_name ?? c?.title;
+                    if (id != null) map[String(id)] = name ? String(name) : String(id);
+                    return id != null ? { id: String(id), name: name ? String(name) : String(id) } : null;
+                })
+                .filter(Boolean)
+                .sort((a, b) => a.name.localeCompare(b.name, 'vi', { sensitivity: 'base' }));
             setCategoryMap(map);
+            setCategories(list);
         } catch {
             setCategoryMap({});
+            setCategories([]);
         }
     };
 
@@ -727,6 +755,59 @@ export default function HomeScreen() {
         return (arr || []).filter((x) => normalizeText(x?.name).includes(s));
     };
 
+    const txOptions = useMemo(
+        () => [
+            { id: TX_TYPES.ALL, name: 'Tất cả' },
+            { id: TX_TYPES.SELL, name: 'Bán' },
+            { id: TX_TYPES.RENT, name: 'Cho thuê' },
+        ],
+        []
+    );
+
+    const txLabelSelected = useMemo(() => {
+        const found = txOptions.find((x) => String(x.id) === String(txFilter));
+        return found?.name || 'Hình thức';
+    }, [txOptions, txFilter]);
+
+    const openTxModal = () => {
+        setTxSearch('');
+        setTxOpen(true);
+    };
+
+    const clearTxFilter = () => {
+        setTxFilter(TX_TYPES.ALL);
+        setTxSearch('');
+    };
+
+    const txFilteredList = useMemo(() => {
+        const s = normalizeText(txSearch);
+        if (!s) return txOptions;
+        return txOptions.filter((x) => normalizeText(x?.name).includes(s));
+    }, [txOptions, txSearch]);
+
+    const categoryLabel = useMemo(() => {
+        if (categoryFilter === 'ALL') return 'Loại BĐS';
+        const found = categories.find((c) => String(c.id) === String(categoryFilter));
+        return found?.name || 'Loại BĐS';
+    }, [categories, categoryFilter]);
+
+    const openCategoryModal = async () => {
+        setCatSearch('');
+        setCatOpen(true);
+        if (!categories.length) await fetchCategories();
+    };
+
+    const clearCategory = () => {
+        setCategoryFilter('ALL');
+        setCatSearch('');
+    };
+
+    const catFilteredList = useMemo(() => {
+        const s = normalizeText(catSearch);
+        if (!s) return categories;
+        return (categories || []).filter((x) => normalizeText(x?.name).includes(s));
+    }, [categories, catSearch]);
+
     /* ================= FETCH POSTS ================= */
 
     const getPayloadTotal = (payload) => {
@@ -745,6 +826,22 @@ export default function HomeScreen() {
         return null;
     };
 
+    const buildPostSearchParams = (page, pageSize) => {
+        const params = { page, page_size: pageSize };
+        const query = q?.trim();
+        if (query) params.q = query;
+        if (categoryFilter !== 'ALL') params.category_id = categoryFilter;
+        if (txFilter !== TX_TYPES.ALL) params.post_type_id = txFilter;
+        const minPrice = parsePriceInput(priceMin);
+        const maxPrice = parsePriceInput(priceMax);
+        if (minPrice != null) params.price_min = minPrice;
+        if (maxPrice != null) params.price_max = maxPrice;
+        if (province?.name) params.province = province.name;
+        if (district?.name) params.district = district.name;
+        if (ward?.name) params.ward = ward.name;
+        return params;
+    };
+
     const fetchPosts = async () => {
         try {
             setLoading(true);
@@ -753,7 +850,7 @@ export default function HomeScreen() {
             const pageSize = 100;
             let url = baseUrl;
             let page = 1;
-            let params = { page, page_size: pageSize };
+            let params = buildPostSearchParams(page, pageSize);
             let allPosts = [];
             const seen = new Set();
             let guard = 0;
@@ -779,7 +876,7 @@ export default function HomeScreen() {
                     if (Number.isFinite(total) && allPosts.length < total && items.length) {
                         page += 1;
                         url = baseUrl;
-                        params = { page, page_size: pageSize };
+                        params = buildPostSearchParams(page, pageSize);
                     } else {
                         url = null;
                     }
@@ -821,11 +918,24 @@ export default function HomeScreen() {
 
     useEffect(() => {
         if (isFocused) {
-            fetchPosts();
             fetchCategories();
             loadUnreadCount();
         }
     }, [isFocused, userToken]);
+
+    useEffect(() => {
+        if (!isFocused) return;
+        const timer = setTimeout(() => {
+            fetchPosts();
+        }, 400);
+        return () => clearTimeout(timer);
+    }, [isFocused, q, categoryFilter, txFilter, priceMin, priceMax, province, district, ward]);
+
+    useEffect(() => {
+        if (categoryFilter === 'ALL') return;
+        const exists = categories.some((c) => String(c.id) === String(categoryFilter));
+        if (!exists) setCategoryFilter('ALL');
+    }, [categories, categoryFilter]);
 
     const onRefresh = async () => {
         try {
@@ -839,35 +949,11 @@ export default function HomeScreen() {
 
     /* ================= FILTER + SEARCH ================= */
 
-    const filteredPosts = useMemo(() => {
-        let list = posts;
-
-        if (txFilter !== TX_TYPES.ALL) {
-            list = list.filter((p) => Number(getTxTypeId(p)) === Number(txFilter));
-        }
-
-        const query = normalizeText(q);
-        const lq = locationQuery;
-        const minPrice = parsePriceInput(priceMin);
-        const maxPrice = parsePriceInput(priceMax);
-
-        if (!query && !lq && !minPrice && !maxPrice) return list;
-
-        return list.filter((p) => {
-            const title = normalizeText(p?.title);
-            const addr = getPostLocationText(p);
-            const okText = !query ? true : title.includes(query) || addr.includes(query);
-            const okLoc = !lq ? true : addr.includes(lq);
-            const priceValue = parsePriceValue(p?.priceValue ?? p?.price_value ?? p?.price ?? null);
-            const okMin = minPrice == null ? true : priceValue != null && priceValue >= minPrice;
-            const okMax = maxPrice == null ? true : priceValue != null && priceValue <= maxPrice;
-            return okText && okLoc && okMin && okMax;
-        });
-    }, [posts, txFilter, q, addressMap, locationQuery, priceMin, priceMax]);
+    const filteredPosts = useMemo(() => posts, [posts]);
 
     useEffect(() => {
         setVisibleCount(PAGE_SIZE);
-    }, [txFilter, q, locationQuery, priceMin, priceMax, posts.length]);
+    }, [txFilter, categoryFilter, q, locationQuery, priceMin, priceMax, posts.length]);
 
     const visiblePosts = useMemo(() => filteredPosts.slice(0, visibleCount), [filteredPosts, visibleCount]);
     const canLoadMore = visibleCount < filteredPosts.length;
@@ -983,7 +1069,7 @@ export default function HomeScreen() {
         const addrLoaded = Object.prototype.hasOwnProperty.call(addressMap, item?.id);
         const addrText = addressMap?.[item?.id] ?? '';
 
-        const catName = categoryMap?.[String(item?.category_id)] || '—';
+        const catName = categoryMap?.[String(getCategoryId(item))] || '—';
 
         return (
             <TouchableOpacity
@@ -1057,59 +1143,11 @@ export default function HomeScreen() {
                     )}
                 </View>
 
-                <View style={styles.priceRow}>
-                    <Ionicons name="cash-outline" size={18} color="#666" />
-                    <TextInput
-                        value={priceMin}
-                        onChangeText={(text) => setPriceMin(formatNumberInput(text))}
-                        placeholder="Giá từ (VND)"
-                        keyboardType="numeric"
-                        style={styles.priceInput}
-                        returnKeyType="next"
-                    />
-                    <Text style={styles.priceDash}>-</Text>
-                    <TextInput
-                        value={priceMax}
-                        onChangeText={(text) => setPriceMax(formatNumberInput(text))}
-                        placeholder="Giá đến (VND)"
-                        keyboardType="numeric"
-                        style={styles.priceInput}
-                        returnKeyType="search"
-                    />
-                    {(priceMin || priceMax) ? (
-                        <TouchableOpacity
-                            onPress={() => {
-                                setPriceMin('');
-                                setPriceMax('');
-                            }}
-                            style={styles.clearBtn}
-                        >
-                            <Ionicons name="close" size={18} color="#666" />
-                        </TouchableOpacity>
-                    ) : null}
-                </View>
-
-                {/* Location filter button */}
-                <View style={styles.locRow}>
-                    <TouchableOpacity style={styles.locBtn} onPress={openLocationModal} activeOpacity={0.9}>
-                        <Ionicons name="location-outline" size={18} color="#111" />
-                        <Text style={styles.locText} numberOfLines={1}>
-                            {locationLabel}
-                        </Text>
-                        <Ionicons name="chevron-down" size={18} color="#111" />
+                <View style={styles.filterToggleRow}>
+                    <TouchableOpacity style={styles.filterToggleBtn} onPress={() => setFilterOpen(true)} activeOpacity={0.9}>
+                        <Ionicons name="options-outline" size={18} color="#111" />
+                        <Text style={styles.filterToggleText}>Bộ lọc</Text>
                     </TouchableOpacity>
-
-                    {(province || district || ward) ? (
-                        <TouchableOpacity style={styles.locClear} onPress={clearLocation} activeOpacity={0.9}>
-                            <Ionicons name="close" size={16} color="#111" />
-                        </TouchableOpacity>
-                    ) : null}
-                </View>
-
-                <View style={styles.filters}>
-                    <FilterChip label="Tất cả" active={txFilter === TX_TYPES.ALL} onPress={() => setTxFilter(TX_TYPES.ALL)} />
-                    <FilterChip label="Bán" active={txFilter === TX_TYPES.SELL} onPress={() => setTxFilter(TX_TYPES.SELL)} />
-                    <FilterChip label="Cho thuê" active={txFilter === TX_TYPES.RENT} onPress={() => setTxFilter(TX_TYPES.RENT)} />
                 </View>
 
                 <Text style={styles.hint}>
@@ -1350,6 +1388,280 @@ export default function HomeScreen() {
                 </TouchableWithoutFeedback>
             </Modal>
 
+            {/* FILTER MODAL */}
+            <Modal visible={filterOpen} animationType="slide" transparent>
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.locModalCard}>
+                            <View style={styles.modalHeader}>
+                                <Text style={styles.modalTitle}>Bộ lọc</Text>
+                                <TouchableOpacity onPress={() => setFilterOpen(false)}>
+                                    <Ionicons name="close" size={24} color="#333" />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.modalSection}>
+                                <Text style={styles.modalSectionTitle}>Khoảng giá</Text>
+                                <View style={styles.priceRow}>
+                                    <Ionicons name="cash-outline" size={18} color="#666" />
+                                    <TextInput
+                                        value={priceMin}
+                                        onChangeText={(text) => setPriceMin(formatNumberInput(text))}
+                                        placeholder="Giá từ (VND)"
+                                        keyboardType="numeric"
+                                        style={styles.priceInput}
+                                        returnKeyType="next"
+                                    />
+                                    <Text style={styles.priceDash}>-</Text>
+                                    <TextInput
+                                        value={priceMax}
+                                        onChangeText={(text) => setPriceMax(formatNumberInput(text))}
+                                        placeholder="Giá đến (VND)"
+                                        keyboardType="numeric"
+                                        style={styles.priceInput}
+                                        returnKeyType="search"
+                                    />
+                                    {(priceMin || priceMax) ? (
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                setPriceMin('');
+                                                setPriceMax('');
+                                            }}
+                                            style={styles.clearBtn}
+                                        >
+                                            <Ionicons name="close" size={18} color="#666" />
+                                        </TouchableOpacity>
+                                    ) : null}
+                                </View>
+                            </View>
+
+                            <View style={styles.modalSection}>
+                                <Text style={styles.modalSectionTitle}>Khu vực</Text>
+                                <View style={styles.locRow}>
+                                    <TouchableOpacity style={styles.locBtn} onPress={openLocationModal} activeOpacity={0.9}>
+                                        <Ionicons name="location-outline" size={18} color="#111" />
+                                        <Text style={styles.locText} numberOfLines={1}>
+                                            {locationLabel}
+                                        </Text>
+                                        <Ionicons name="chevron-down" size={18} color="#111" />
+                                    </TouchableOpacity>
+
+                                    {(province || district || ward) ? (
+                                        <TouchableOpacity style={styles.locClear} onPress={clearLocation} activeOpacity={0.9}>
+                                            <Ionicons name="close" size={16} color="#111" />
+                                        </TouchableOpacity>
+                                    ) : null}
+                                </View>
+                            </View>
+
+                            <View style={styles.modalSection}>
+                                <Text style={styles.modalSectionTitle}>Loại BĐS & Hình thức</Text>
+                                <View style={styles.filterRow}>
+                                    <TouchableOpacity style={[styles.locBtn, styles.filterBtn]} onPress={openCategoryModal} activeOpacity={0.9}>
+                                        <Ionicons name="grid-outline" size={18} color="#111" />
+                                        <Text style={styles.locText} numberOfLines={1}>
+                                            {categoryLabel}
+                                        </Text>
+                                        <Ionicons name="chevron-down" size={18} color="#111" />
+                                    </TouchableOpacity>
+
+                                    {categoryFilter !== 'ALL' ? (
+                                        <TouchableOpacity style={[styles.locClear, styles.filterClear]} onPress={clearCategory} activeOpacity={0.9}>
+                                            <Ionicons name="close" size={16} color="#111" />
+                                        </TouchableOpacity>
+                                    ) : null}
+
+                                    <TouchableOpacity style={[styles.locBtn, styles.filterBtn]} onPress={openTxModal} activeOpacity={0.9}>
+                                        <Ionicons name="swap-horizontal-outline" size={18} color="#111" />
+                                        <Text style={styles.locText} numberOfLines={1}>
+                                            {txLabelSelected}
+                                        </Text>
+                                        <Ionicons name="chevron-down" size={18} color="#111" />
+                                    </TouchableOpacity>
+
+                                    {txFilter !== TX_TYPES.ALL ? (
+                                        <TouchableOpacity style={[styles.locClear, styles.filterClear]} onPress={clearTxFilter} activeOpacity={0.9}>
+                                            <Ionicons name="close" size={16} color="#111" />
+                                        </TouchableOpacity>
+                                    ) : null}
+                                </View>
+                            </View>
+
+                            <View style={styles.locModalBottom}>
+                                <TouchableOpacity style={styles.locApplyBtn} onPress={() => setFilterOpen(false)} activeOpacity={0.9}>
+                                    <Text style={{ color: '#fff', fontWeight: '900' }}>Xong</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* CATEGORY MODAL */}
+            <Modal visible={catOpen} animationType="slide" transparent>
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.locModalCard}>
+                            <View style={styles.modalHeader}>
+                                <Text style={styles.modalTitle}>Chọn loại BĐS</Text>
+                                <TouchableOpacity onPress={() => setCatOpen(false)}>
+                                    <Ionicons name="close" size={24} color="#333" />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.locSearchRow}>
+                                <Ionicons name="search" size={18} color="#666" />
+                                <TextInput
+                                    value={catSearch}
+                                    onChangeText={setCatSearch}
+                                    placeholder="Tìm loại bất động sản..."
+                                    style={styles.locSearchInput}
+                                />
+                                {!!catSearch && (
+                                    <TouchableOpacity onPress={() => setCatSearch('')}>
+                                        <Ionicons name="close" size={18} color="#666" />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            <View style={styles.locSelectedRow}>
+                                <Text style={styles.locSelectedText}>Đang chọn: {categoryLabel}</Text>
+                                {categoryFilter !== 'ALL' ? (
+                                    <TouchableOpacity style={styles.locClearAllBtn} onPress={clearCategory}>
+                                        <Text style={{ fontWeight: '800', color: '#111' }}>Bỏ chọn</Text>
+                                    </TouchableOpacity>
+                                ) : null}
+                            </View>
+
+                            <View style={{ paddingHorizontal: 12 }}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.locPill,
+                                        categoryFilter === 'ALL' && styles.locPillActive,
+                                    ]}
+                                    onPress={() => {
+                                        setCategoryFilter('ALL');
+                                        setCatOpen(false);
+                                    }}
+                                    activeOpacity={0.9}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.locPillText,
+                                            categoryFilter === 'ALL' && styles.locPillTextActive,
+                                        ]}
+                                        numberOfLines={1}
+                                    >
+                                        Tất cả loại
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            <FlatList
+                                data={catFilteredList}
+                                keyExtractor={(x, idx) => String(x?.id ?? idx)}
+                                style={{ paddingHorizontal: 12, marginTop: 10, maxHeight: 320 }}
+                                showsVerticalScrollIndicator
+                                renderItem={({ item }) => {
+                                    const active = String(item?.id) === String(categoryFilter);
+                                    return (
+                                        <TouchableOpacity
+                                            style={[styles.locPill, active && styles.locPillActive, { marginBottom: 10 }]}
+                                            onPress={() => {
+                                                setCategoryFilter(String(item?.id));
+                                                setCatOpen(false);
+                                            }}
+                                            activeOpacity={0.9}
+                                        >
+                                            <Text style={[styles.locPillText, active && styles.locPillTextActive]} numberOfLines={1}>
+                                                {item?.name}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                }}
+                                ListEmptyComponent={<Text style={{ color: '#999' }}>Không có dữ liệu loại BĐS</Text>}
+                            />
+
+                            <View style={styles.locModalBottom}>
+                                <TouchableOpacity style={styles.locApplyBtn} onPress={() => setCatOpen(false)} activeOpacity={0.9}>
+                                    <Text style={{ color: '#fff', fontWeight: '900' }}>Xong</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* TX TYPE MODAL */}
+            <Modal visible={txOpen} animationType="slide" transparent>
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.locModalCard}>
+                            <View style={styles.modalHeader}>
+                                <Text style={styles.modalTitle}>Chọn hình thức</Text>
+                                <TouchableOpacity onPress={() => setTxOpen(false)}>
+                                    <Ionicons name="close" size={24} color="#333" />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.locSearchRow}>
+                                <Ionicons name="search" size={18} color="#666" />
+                                <TextInput
+                                    value={txSearch}
+                                    onChangeText={setTxSearch}
+                                    placeholder="Tìm hình thức..."
+                                    style={styles.locSearchInput}
+                                />
+                                {!!txSearch && (
+                                    <TouchableOpacity onPress={() => setTxSearch('')}>
+                                        <Ionicons name="close" size={18} color="#666" />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            <View style={styles.locSelectedRow}>
+                                <Text style={styles.locSelectedText}>Đang chọn: {txLabelSelected}</Text>
+                                {txFilter !== TX_TYPES.ALL ? (
+                                    <TouchableOpacity style={styles.locClearAllBtn} onPress={clearTxFilter}>
+                                        <Text style={{ fontWeight: '800', color: '#111' }}>Bỏ chọn</Text>
+                                    </TouchableOpacity>
+                                ) : null}
+                            </View>
+
+                            <FlatList
+                                data={txFilteredList}
+                                keyExtractor={(x, idx) => String(x?.id ?? idx)}
+                                style={{ paddingHorizontal: 12, marginTop: 10, maxHeight: 320 }}
+                                showsVerticalScrollIndicator
+                                renderItem={({ item }) => {
+                                    const active = String(item?.id) === String(txFilter);
+                                    return (
+                                        <TouchableOpacity
+                                            style={[styles.locPill, active && styles.locPillActive, { marginBottom: 10 }]}
+                                            onPress={() => {
+                                                setTxFilter(item?.id);
+                                                setTxOpen(false);
+                                            }}
+                                            activeOpacity={0.9}
+                                        >
+                                            <Text style={[styles.locPillText, active && styles.locPillTextActive]} numberOfLines={1}>
+                                                {item?.name}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                }}
+                            />
+
+                            <View style={styles.locModalBottom}>
+                                <TouchableOpacity style={styles.locApplyBtn} onPress={() => setTxOpen(false)} activeOpacity={0.9}>
+                                    <Text style={{ color: '#fff', fontWeight: '900' }}>Xong</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
             {/* AI Chat Modal (optional) */}
             <Modal visible={aiOpen} animationType="slide" transparent>
                 <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
@@ -1515,6 +1827,9 @@ const styles = StyleSheet.create({
     priceDash: { color: '#666', fontWeight: '800' },
 
     locRow: { marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 8 },
+    filterRow: { marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 8 },
+    filterBtn: { flex: 1, paddingVertical: 8 },
+    filterClear: { width: 34, height: 34, borderRadius: 10 },
     locBtn: {
         flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
         borderWidth: 1, borderColor: '#e6e6e6', borderRadius: 12,
@@ -1529,6 +1844,19 @@ const styles = StyleSheet.create({
 
     filters: { flexDirection: 'row', marginTop: 6, gap: 8 },
     hint: { marginTop: 6, color: '#666', fontSize: 12 },
+    filterToggleRow: { marginTop: 6, flexDirection: 'row', justifyContent: 'flex-end' },
+    filterToggleBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#e6e6e6',
+        backgroundColor: '#fff',
+    },
+    filterToggleText: { fontWeight: '800', color: '#111' },
 
     chip: {
         paddingHorizontal: 12,
@@ -1623,6 +1951,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     },
     modalTitle: { fontSize: 16, fontWeight: '900', color: '#111' },
+    modalSection: { paddingHorizontal: 12, paddingTop: 10 },
+    modalSectionTitle: { fontWeight: '900', color: '#111', marginBottom: 6 },
 
     chatInputRow: {
         padding: 10, borderTopWidth: 1, borderTopColor: '#eee',
