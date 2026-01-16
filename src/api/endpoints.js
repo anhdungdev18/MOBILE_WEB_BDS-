@@ -16,6 +16,8 @@ export const ENDPOINTS = {
 
     POST_OWNER_STATUS: (id) => `/api/listings/posts/${id}/owner-status`,
     OWNER_STATUS: (id) => `/api/listings/posts/${id}/owner-status`,
+    POST_BUMP: (id) => `/api/listings/posts/${id}/bump`,
+    POST_BUMP_SCHEDULE: (id) => `/api/listings/posts/${id}/bump-schedule`,
 
     POST_DELETE: (id) => `/api/listings/posts/${id}`,
 

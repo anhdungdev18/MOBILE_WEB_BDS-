@@ -7,6 +7,8 @@ import {
     Alert,
     Image,
     Linking,
+    Modal,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -31,6 +33,7 @@ export default function ProfileScreen() {
     const [loading, setLoading] = useState(false);
     const [vipLoading, setVipLoading] = useState(false);
     const [upgradeLoading, setUpgradeLoading] = useState(false);
+    const [vipModalVisible, setVipModalVisible] = useState(false);
 
     const fetchProfile = async () => {
         try {
@@ -117,11 +120,7 @@ export default function ProfileScreen() {
     };
 
     const chooseVipPlan = () => {
-        Alert.alert('Chọn gói VIP', 'Vui lòng chọn thời hạn', [
-            { text: 'Hủy', style: 'cancel' },
-            { text: '1 tháng', onPress: () => startUpgradeVip('AGENT_1M', '1 tháng') },
-            { text: '3 tháng', onPress: () => startUpgradeVip('AGENT_3M', '3 tháng') },
-        ]);
+        setVipModalVisible(true);
     };
 
     return (
@@ -185,6 +184,61 @@ export default function ProfileScreen() {
                     </TouchableOpacity>
                 </View>
             </View>
+
+            <Modal
+                transparent
+                visible={vipModalVisible}
+                animationType="fade"
+                onRequestClose={() => setVipModalVisible(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setVipModalVisible(false)} />
+                <View style={styles.modalSheet}>
+                    <View style={styles.modalHeader}>
+                        <Text style={styles.modalTitle}>Gia hạn VIP</Text>
+                        <TouchableOpacity onPress={() => setVipModalVisible(false)} style={styles.modalClose}>
+                            <Ionicons name="close" size={18} color="#111" />
+                        </TouchableOpacity>
+                    </View>
+                    <Text style={styles.modalSub}>
+                        Chọn gói và xem ưu đãi bạn nhận được.
+                    </Text>
+
+                    <View style={styles.planCard}>
+                        <Text style={styles.planTitle}>Gói 1 tháng</Text>
+                        <Text style={styles.planPrice}>Thời hạn: 30 ngày</Text>
+                        <Text style={styles.planBenefit}>• Bump tối đa 10 lượt/ngày</Text>
+                        <Text style={styles.planBenefit}>• Ưu tiên hiển thị so với tin thường</Text>
+                        <Text style={styles.planBenefit}>• Hỗ trợ đăng nhiều ảnh hơn</Text>
+                        <TouchableOpacity
+                            style={styles.planBtn}
+                            onPress={() => {
+                                setVipModalVisible(false);
+                                startUpgradeVip('AGENT_1M', '1 tháng');
+                            }}
+                        >
+                            <Text style={styles.planBtnText}>Chọn gói 1 tháng</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.planCard}>
+                        <Text style={styles.planTitle}>Gói 3 tháng</Text>
+                        <Text style={styles.planPrice}>Thời hạn: 90 ngày</Text>
+                        <Text style={styles.planBenefit}>• Bump tối đa 20 lượt/ngày</Text>
+                        <Text style={styles.planBenefit}>• Ưu tiên hiển thị cao hơn</Text>
+                        <Text style={styles.planBenefit}>• Hỗ trợ đăng nhiều ảnh hơn</Text>
+                        <Text style={styles.planBenefit}>• Tiết kiệm chi phí so với 1 tháng</Text>
+                        <TouchableOpacity
+                            style={styles.planBtn}
+                            onPress={() => {
+                                setVipModalVisible(false);
+                                startUpgradeVip('AGENT_3M', '3 tháng');
+                            }}
+                        >
+                            <Text style={styles.planBtnText}>Chọn gói 3 tháng</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Loading */}
             {loading && (
@@ -362,4 +416,55 @@ const styles = StyleSheet.create({
         borderBottomColor: '#EEE',
     },
     menuText: { flex: 1, marginLeft: 12, fontSize: 16, color: '#333' },
+
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.35)',
+    },
+    modalSheet: {
+        position: 'absolute',
+        left: 16,
+        right: 16,
+        bottom: 24,
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#EEE',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    modalTitle: { fontSize: 18, fontWeight: '800', color: '#111' },
+    modalClose: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#F3F3F3',
+    },
+    modalSub: { marginTop: 6, color: '#666' },
+
+    planCard: {
+        marginTop: 12,
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#EEE',
+        backgroundColor: '#fff',
+    },
+    planTitle: { fontSize: 16, fontWeight: '800', color: '#111' },
+    planPrice: { marginTop: 4, color: '#666' },
+    planBenefit: { marginTop: 4, color: '#444' },
+    planBtn: {
+        marginTop: 10,
+        backgroundColor: '#111',
+        paddingVertical: 10,
+        borderRadius: 10,
+        alignItems: 'center',
+    },
+    planBtnText: { color: '#fff', fontWeight: '800' },
 });

@@ -100,6 +100,23 @@ function formatPriceVND(n) {
     }
 }
 
+function toNum(value, fallback = 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeRunTime(value) {
+    if (!value) return "";
+    const s = String(value);
+    return s.length >= 5 ? s.slice(0, 5) : s;
+}
+
+function isValidTime(value) {
+    if (!/^\d{2}:\d{2}$/.test(value)) return false;
+    const [h, m] = value.split(":").map((n) => Number(n));
+    return h >= 0 && h <= 23 && m >= 0 && m <= 59;
+}
+
 export default function ManagePostsScreen() {
     const navigation = useNavigation();
     const isFocused = useIsFocused();
@@ -108,6 +125,10 @@ export default function ManagePostsScreen() {
     const [posts, setPosts] = useState([]);
     const [activeTab, setActiveTab] = useState("all");
     const [query, setQuery] = useState("");
+    const [schedulePostId, setSchedulePostId] = useState(null);
+    const [scheduleTime, setScheduleTime] = useState("");
+    const [scheduleSaving, setScheduleSaving] = useState(false);
+    const [scheduleByPostId, setScheduleByPostId] = useState({});
 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -151,6 +172,23 @@ export default function ManagePostsScreen() {
             if (appr === "rejected") c.rejected += 1;
         }
         return c;
+    }, [posts]);
+
+    const bumpSummary = useMemo(() => {
+        const ref = posts.find((p) => {
+            return (
+                toNum(p?.daily_limit) > 0 ||
+                toNum(p?.bumps_used_today) > 0 ||
+                toNum(p?.remaining_today) > 0
+            );
+        });
+        if (!ref) return null;
+
+        return {
+            dailyLimit: toNum(ref?.daily_limit),
+            remainingToday: toNum(ref?.remaining_today),
+            bumpsUsedToday: toNum(ref?.bumps_used_today),
+        };
     }, [posts]);
 
     const filtered = useMemo(() => {
@@ -264,9 +302,116 @@ export default function ManagePostsScreen() {
         [setPosts]
     );
 
+    const handleBump = useCallback(
+        async (post) => {
+            try {
+                const res = await client.post(ENDPOINTS.POST_BUMP(post.id));
+                const data = res?.data;
+
+                if (!data || data?.ok === 0) {
+                    const msg = data?.message || data?.detail || "Không đẩy tin được.";
+                    Alert.alert("Lỗi", msg);
+                    return;
+                }
+
+                const dailyLimit = toNum(data?.daily_limit);
+                const bumpsUsedToday = toNum(data?.bumps_used_today);
+                const remainingToday = toNum(data?.remaining_today);
+                const postDailyLimit = toNum(data?.post_daily_limit);
+                const postBumpsUsedToday = toNum(data?.post_bumps_used_today);
+                const postRemainingToday = toNum(data?.post_remaining_today);
+
+                setPosts((prev) =>
+                    prev.map((p) => {
+                        const next = {
+                            ...p,
+                            daily_limit: dailyLimit,
+                            bumps_used_today: bumpsUsedToday,
+                            remaining_today: remainingToday,
+                        };
+                        if (p.id === post.id) {
+                            return {
+                                ...next,
+                                post_daily_limit: postDailyLimit,
+                                post_bumps_used_today: postBumpsUsedToday,
+                                post_remaining_today: postRemainingToday,
+                                bumped_at: data?.bumped_at || p.bumped_at,
+                            };
+                        }
+                        return next;
+                    })
+                );
+
+                Alert.alert("Thành công", "Đã đẩy tin.");
+            } catch (e) {
+                const msg =
+                    e?.response?.data?.message ||
+                    e?.response?.data?.detail ||
+                    "Không đẩy tin được.";
+                console.log("Bump error:", e?.response?.status, e?.response?.data || e?.message);
+                Alert.alert("Lỗi", msg);
+            }
+        },
+        [setPosts]
+    );
+
+    const openSchedule = useCallback(
+        (post) => {
+            const postId = post?.id;
+            if (!postId) return;
+            const nextId = String(postId);
+            if (schedulePostId === nextId) {
+                setSchedulePostId(null);
+                return;
+            }
+            setSchedulePostId(nextId);
+            const existing = scheduleByPostId[nextId];
+            setScheduleTime(existing || "09:00");
+        },
+        [schedulePostId, scheduleByPostId]
+    );
+
+    const saveSchedule = useCallback(
+        async (post) => {
+            const postId = post?.id;
+            if (!postId) return;
+            const timeValue = scheduleTime.trim();
+            if (!isValidTime(timeValue)) {
+                Alert.alert("Lỗi", "Giờ hẹn phải theo định dạng HH:MM.");
+                return;
+            }
+
+            try {
+                setScheduleSaving(true);
+                const res = await client.post(ENDPOINTS.POST_BUMP_SCHEDULE(postId), {
+                    run_time: timeValue,
+                });
+                const runTime = normalizeRunTime(res?.data?.run_time || timeValue);
+                setScheduleByPostId((prev) => ({ ...prev, [String(postId)]: runTime }));
+                setSchedulePostId(null);
+                Alert.alert("Thành công", `Đã hẹn giờ bump lúc ${runTime} mỗi ngày.`);
+            } catch (e) {
+                const msg =
+                    e?.response?.data?.message ||
+                    e?.response?.data?.detail ||
+                    "Không tạo lịch bump được.";
+                console.log("Schedule bump error:", e?.response?.status, e?.response?.data || e?.message);
+                Alert.alert("Lỗi", msg);
+            } finally {
+                setScheduleSaving(false);
+            }
+        },
+        [scheduleTime]
+    );
+
     const renderItem = ({ item }) => {
         const appr = normalizeApproval(item.approval_status ?? item.approvalStatus);
         const st = normalizePostStatus(item.post_status ?? item.postStatus ?? item.post_status_id);
+
+        const dailyLimit = toNum(item?.daily_limit);
+        const remainingToday = toNum(item?.remaining_today);
+        const postDailyLimit = toNum(item?.post_daily_limit);
+        const postRemainingToday = toNum(item?.post_remaining_today);
 
         const thumb = getFirstImageUrl(item);
         const imgCount = getImagesCount(item);
@@ -274,6 +419,13 @@ export default function ManagePostsScreen() {
         const canToggleHide = appr === "approved";
         const canEdit = true; // bạn muốn sửa luôn => mở cho tất cả
         const canDelete = true; // bạn muốn xóa luôn => mở cho tất cả
+        const canBump =
+            appr === "approved" &&
+            st === "active" &&
+            remainingToday > 0 &&
+            postRemainingToday > 0;
+
+        const scheduleTimeLabel = scheduleByPostId[String(item?.id)];
 
         return (
             <View style={styles.card}>
@@ -323,6 +475,69 @@ export default function ManagePostsScreen() {
                         </View>
                     </View>
                 </TouchableOpacity>
+
+                <View style={styles.bumpInfo}>
+                    <Text style={styles.bumpText}>
+                        Bài này còn{" "}
+                        <Text style={styles.bumpStrong}>{postRemainingToday}</Text>
+                        {postDailyLimit ? `/${postDailyLimit}` : ""} lượt bump hôm nay
+                    </Text>
+                    {scheduleTimeLabel ? (
+                        <Text style={styles.bumpText}>
+                            Giờ hẹn bump: <Text style={styles.bumpStrong}>{scheduleTimeLabel}</Text>
+                        </Text>
+                    ) : null}
+                </View>
+
+                <View style={styles.bumpRow}>
+                    <TouchableOpacity
+                        style={[styles.bumpBtn, !canBump && styles.bumpBtnDisabled]}
+                        onPress={() => canBump && handleBump(item)}
+                        disabled={!canBump}
+                    >
+                        <Ionicons name="arrow-up-circle-outline" size={20} color={canBump ? "#fff" : "#bbb"} />
+                        <Text style={[styles.bumpBtnText, !canBump && { color: "#bbb" }]}>Đẩy tin</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.scheduleBtn, scheduleSaving && styles.scheduleBtnDisabled]}
+                        onPress={() => openSchedule(item)}
+                        disabled={scheduleSaving}
+                    >
+                        <Ionicons name="time-outline" size={20} color="#111" />
+                        <Text style={styles.scheduleBtnText}>Hẹn giờ</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {String(schedulePostId) === String(item?.id) ? (
+                    <View style={styles.schedulePanel}>
+                        <Text style={styles.scheduleLabel}>Giờ hẹn (HH:MM)</Text>
+                        <TextInput
+                            value={scheduleTime}
+                            onChangeText={setScheduleTime}
+                            placeholder="07:30"
+                            placeholderTextColor="#999"
+                            style={styles.scheduleInput}
+                        />
+                        <View style={styles.scheduleActions}>
+                            <TouchableOpacity
+                                style={[styles.scheduleActionBtn, styles.scheduleActionPrimary]}
+                                onPress={() => saveSchedule(item)}
+                                disabled={scheduleSaving}
+                            >
+                                <Text style={styles.scheduleActionTextPrimary}>
+                                    {scheduleSaving ? "Đang lưu..." : "Lưu"}
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.scheduleActionBtn, styles.scheduleActionOutline]}
+                                onPress={() => setSchedulePostId(null)}
+                                disabled={scheduleSaving}
+                            >
+                                <Text style={styles.scheduleActionTextOutline}>Hủy</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                ) : null}
 
                 <View style={styles.actions}>
                     <TouchableOpacity
@@ -391,6 +606,13 @@ export default function ManagePostsScreen() {
                 <TabBtn keyName="pending" label="Chờ duyệt" />
                 <TabBtn keyName="rejected" label="Từ chối" />
                 <TabBtn keyName="hidden" label="Đã ẩn" />
+                {bumpSummary ? (
+                    <View style={styles.bumpTab}>
+                        <Text style={styles.bumpTabText}>
+                            Bump: {bumpSummary.remainingToday}/{bumpSummary.dailyLimit}
+                        </Text>
+                    </View>
+                ) : null}
             </View>
 
             {loading ? (
@@ -448,6 +670,15 @@ const styles = StyleSheet.create({
     tabActive: { backgroundColor: "#111", borderColor: "#111" },
     tabText: { fontSize: 12, color: "#333", fontWeight: "700" },
     tabTextActive: { color: "#fff" },
+    bumpTab: {
+        backgroundColor: "#fff",
+        borderWidth: 1,
+        borderColor: "#eee",
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        borderRadius: 999,
+    },
+    bumpTabText: { fontSize: 12, color: "#666", fontWeight: "700" },
 
     card: {
         backgroundColor: "#fff",
@@ -490,6 +721,69 @@ const styles = StyleSheet.create({
     pillBad: { backgroundColor: "#ea4335" },
     pillHidden: { backgroundColor: "#666" },
     pillText: { color: "#fff", fontSize: 12, fontWeight: "800" },
+
+    bumpInfo: { marginTop: 8 },
+    bumpText: { color: "#666", fontSize: 12 },
+    bumpStrong: { color: "#111", fontWeight: "800" },
+
+    bumpRow: { marginTop: 12, flexDirection: "row", gap: 10 },
+    bumpBtn: {
+        flex: 1,
+        flexDirection: "row",
+        gap: 8,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingVertical: 10,
+        borderRadius: 12,
+        backgroundColor: "#111",
+    },
+    bumpBtnDisabled: { backgroundColor: "#f0f0f0" },
+    bumpBtnText: { fontSize: 14, fontWeight: "800", color: "#fff" },
+    scheduleBtn: {
+        flex: 1,
+        flexDirection: "row",
+        gap: 8,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingVertical: 10,
+        borderRadius: 12,
+        backgroundColor: "#fff",
+        borderWidth: 1,
+        borderColor: "#ddd",
+    },
+    scheduleBtnDisabled: { opacity: 0.7 },
+    scheduleBtnText: { fontSize: 14, fontWeight: "800", color: "#111" },
+
+    schedulePanel: {
+        marginTop: 10,
+        padding: 10,
+        borderWidth: 1,
+        borderColor: "#eee",
+        borderRadius: 12,
+        backgroundColor: "#fafafa",
+    },
+    scheduleLabel: { fontSize: 12, color: "#666", fontWeight: "700" },
+    scheduleInput: {
+        marginTop: 6,
+        borderWidth: 1,
+        borderColor: "#ddd",
+        borderRadius: 10,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        backgroundColor: "#fff",
+        color: "#111",
+    },
+    scheduleActions: { flexDirection: "row", gap: 8, marginTop: 10 },
+    scheduleActionBtn: {
+        flex: 1,
+        paddingVertical: 10,
+        borderRadius: 10,
+        alignItems: "center",
+    },
+    scheduleActionPrimary: { backgroundColor: "#111" },
+    scheduleActionOutline: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#ddd" },
+    scheduleActionTextPrimary: { color: "#fff", fontWeight: "800" },
+    scheduleActionTextOutline: { color: "#111", fontWeight: "800" },
 
     actions: { flexDirection: "row", gap: 10, marginTop: 12 },
     actionBtn: {
