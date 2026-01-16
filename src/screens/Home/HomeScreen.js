@@ -30,6 +30,8 @@ import {
     getWardsByDistrictCode,
 } from '../../utils/locations';
 
+const kingIcon = require('../../../assets/images/king.png');
+
 const TX_TYPES = {
     ALL: 'ALL',
     SELL: 1,
@@ -849,6 +851,7 @@ export default function HomeScreen() {
         const priceVal = item?.priceValue ?? item?.price_value ?? item?.price ?? null;
         const isFav = Number(favMap?.[item?.id]) === 1;
         const imgUrl = getFirstImageUrl(item);
+        const isVip = Boolean(item?.owner_is_agent);
 
         const addrLoaded = Object.prototype.hasOwnProperty.call(addressMap, item?.id);
         const addrText = addressMap?.[item?.id] ?? '';
@@ -869,6 +872,11 @@ export default function HomeScreen() {
                     })
                 }
             >
+                {isVip ? (
+                    <View style={styles.vipBadge}>
+                        <Image source={kingIcon} style={styles.vipCrown} resizeMode="contain" />
+                    </View>
+                ) : null}
                 {imgUrl ? <Image source={{ uri: imgUrl }} style={styles.cover} /> : null}
 
                 <TouchableOpacity style={styles.heartBtn} onPress={() => toggleFavorite(item?.id)} activeOpacity={0.8}>
@@ -1336,7 +1344,7 @@ const styles = StyleSheet.create({
         borderRadius: 14,
         padding: 12,
         marginBottom: 12,
-        overflow: 'hidden',
+        overflow: 'visible',
     },
     cover: {
         width: '100%',
@@ -1344,6 +1352,22 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         marginBottom: 10,
         backgroundColor: '#f3f3f3',
+    },
+    vipBadge: {
+        position: 'absolute',
+        top: -12,
+        left: -14,
+        width: 78,
+        height: 54,
+        backgroundColor: 'transparent',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 11,
+    },
+    vipCrown: {
+        width: 78,
+        height: 54,
+        transform: [{ rotate: '-45deg' }],
     },
     heartBtn: {
         position: 'absolute',
