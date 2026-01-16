@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
-import { useContext, useEffect, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
@@ -20,6 +21,7 @@ function iconForType(type) {
     if (type === 'comment') return 'chatbox-outline';
     if (type === 'favorite') return 'heart-outline';
     if (type === 'post_status') return 'pricetag-outline';
+    if (type === 'membership') return 'star-outline';
     return 'notifications-outline';
 }
 
@@ -32,6 +34,14 @@ function formatTime(text) {
     }
 }
 
+function buildWsUrl(token) {
+    const base = client?.defaults?.baseURL || '';
+    if (!base) return null;
+    const wsBase = base.replace(/^http/i, 'ws').replace(/\/$/, '');
+    const qs = token ? `?token=${encodeURIComponent(token)}` : '';
+    return `${wsBase}/ws/notifications/${qs}`;
+}
+
 export default function NotificationScreen({ navigation }) {
     const isFocused = useIsFocused();
     const { userToken } = useContext(AuthContext);
@@ -40,6 +50,10 @@ export default function NotificationScreen({ navigation }) {
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [postTitleMap, setPostTitleMap] = useState({});
+    const socketRef = useRef(null);
+    const reconnectTimerRef = useRef(null);
+    const reconnectAttemptRef = useRef(0);
+    const isConnectingRef = useRef(false);
 
     const loadNotifications = async () => {
         if (!userToken) {
@@ -73,6 +87,82 @@ export default function NotificationScreen({ navigation }) {
 
     useEffect(() => {
         if (isFocused) loadNotifications();
+    }, [isFocused, userToken]);
+
+    const handleIncoming = (payload) => {
+        const id = payload?.id ? String(payload.id) : null;
+        if (!id) return;
+        setItems((prev) => {
+            if (prev.some((x) => String(x?.id) === id)) return prev;
+            return [payload, ...(prev || [])];
+        });
+    };
+
+    const scheduleReconnect = () => {
+        if (reconnectTimerRef.current) return;
+        const attempt = reconnectAttemptRef.current;
+        const delay = Math.min(8000, 1200 + attempt * 1500);
+        reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            reconnectAttemptRef.current += 1;
+            connectWs();
+        }, delay);
+    };
+
+    const connectWs = async () => {
+        if (isConnectingRef.current) return;
+        isConnectingRef.current = true;
+        try {
+            const token = await AsyncStorage.getItem('access_token');
+            const wsUrl = buildWsUrl(token);
+            if (!wsUrl) {
+                isConnectingRef.current = false;
+                return;
+            }
+
+            if (socketRef.current) {
+                socketRef.current.close();
+            }
+
+            const ws = new WebSocket(wsUrl);
+            socketRef.current = ws;
+
+            ws.onopen = () => {
+                reconnectAttemptRef.current = 0;
+                isConnectingRef.current = false;
+            };
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event?.data || '{}');
+                    handleIncoming(data);
+                } catch {
+                    // ignore
+                }
+            };
+            ws.onerror = () => {
+                isConnectingRef.current = false;
+                scheduleReconnect();
+            };
+            ws.onclose = () => {
+                isConnectingRef.current = false;
+                scheduleReconnect();
+            };
+        } catch {
+            isConnectingRef.current = false;
+            scheduleReconnect();
+        }
+    };
+
+    useEffect(() => {
+        if (!isFocused || !userToken) return;
+        connectWs();
+        return () => {
+            if (reconnectTimerRef.current) {
+                clearTimeout(reconnectTimerRef.current);
+                reconnectTimerRef.current = null;
+            }
+            if (socketRef.current) socketRef.current.close();
+        };
     }, [isFocused, userToken]);
 
     useEffect(() => {
