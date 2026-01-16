@@ -244,6 +244,21 @@ export default function ProfileScreen() {
             <View style={styles.menu}>
                 <Text style={styles.menuHeader}>Tiện ích</Text>
 
+
+                <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() =>
+                        navigation.navigate('VipOrderHistory', {
+                            userId: profile?.id || profile?.user_id || profile?.userId,
+                        })
+                    }
+                >
+                    <Ionicons name="receipt-outline" size={22} color="#333" />
+                    <Text style={styles.menuText}>Lịch sử nâng cấp VIP</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#999" />
+                </TouchableOpacity>
+
+
                 <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Favorites')}>
                     <Ionicons name="heart-outline" size={22} color="#333" />
                     <Text style={styles.menuText}>Tin đăng đã lưu</Text>

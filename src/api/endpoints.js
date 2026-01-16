@@ -49,5 +49,6 @@ export const ENDPOINTS = {
     // VIP / MEMBERSHIP (từ BE accounts/urls.py)
     MEMBERSHIP_ME: '/api/accounts/membership/me/',
     MEMBERSHIP_UPGRADE_INIT: '/api/accounts/membership/upgrade/init/',
+    MEMBERSHIP_ORDERS: (userId) => `/api/accounts/users/${userId}/membership/orders/`,
 
 };
