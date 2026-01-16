@@ -40,6 +40,41 @@ const TX_TYPES = {
 
 const APPROVED_IDS = new Set([2]); // DB: 2 = Approved
 const PAGE_SIZE = 5;
+const CHAT_LINK_REGEX = /(https?:\/\/[^\s]+)/gi;
+
+const extractPostIdFromUrl = (url) => {
+    if (!url) return null;
+    const tinMatch = url.match(/\/tin\/([^/?#\s]+)/i);
+    if (tinMatch?.[1]) return tinMatch[1];
+    const postMatch = url.match(/\/posts\/(\d+)/i);
+    if (postMatch?.[1]) return postMatch[1];
+    const queryMatch = url.match(/[?&](post_id|postId|id)=([^&#\s]+)/i);
+    if (queryMatch?.[2]) return decodeURIComponent(queryMatch[2]);
+    return null;
+};
+
+const parseChatParts = (text) => {
+    const str = String(text ?? '');
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+    CHAT_LINK_REGEX.lastIndex = 0;
+
+    while ((match = CHAT_LINK_REGEX.exec(str)) !== null) {
+        const url = match[0];
+        if (match.index > lastIndex) {
+            parts.push({ type: 'text', value: str.slice(lastIndex, match.index) });
+        }
+        parts.push({ type: 'link', value: url, postId: extractPostIdFromUrl(url) });
+        lastIndex = match.index + url.length;
+    }
+
+    if (lastIndex < str.length) {
+        parts.push({ type: 'text', value: str.slice(lastIndex) });
+    }
+
+    return parts;
+};
 
 export default function HomeScreen() {
     const isFocused = useIsFocused();
@@ -811,6 +846,12 @@ export default function HomeScreen() {
         if (aiOpen) scrollChatToEnd();
     }, [aiOpen, aiMessages.length]);
 
+    const openChatPost = (postId) => {
+        if (!postId) return;
+        setAiOpen(false);
+        navigation.navigate('PostDetail', { postId, id: postId });
+    };
+
     const sendToAI = async () => {
         const text = aiInput.trim();
         if (!text) return;
@@ -1212,7 +1253,7 @@ export default function HomeScreen() {
                                 data={aiMessages}
                                 keyExtractor={(m) => m.id}
                                 contentContainerStyle={{ padding: 12, paddingBottom: 10 }}
-                                renderItem={({ item }) => <ChatBubble role={item.role} text={item.text} />}
+                                renderItem={({ item }) => <ChatBubble role={item.role} text={item.text} onOpenPost={openChatPost} />}
                                 onContentSizeChange={scrollChatToEnd}
                             />
 
@@ -1247,12 +1288,46 @@ function FilterChip({ label, active, onPress }) {
     );
 }
 
-function ChatBubble({ role, text }) {
+function ChatBubble({ role, text, onOpenPost }) {
+    const navigation = useNavigation();
     const isUser = role === 'user';
+    const parts = useMemo(() => parseChatParts(text), [text]);
+    const handleOpenPost = (postId) => {
+        if (!postId) return;
+        if (onOpenPost) {
+            onOpenPost(postId);
+            return;
+        }
+        navigation.navigate('PostDetail', { postId, id: postId });
+    };
+
     return (
         <View style={[styles.msgRow, isUser ? { justifyContent: 'flex-end' } : { justifyContent: 'flex-start' }]}>
             <View style={[styles.msgBubble, isUser ? styles.msgUser : styles.msgBot]}>
-                <Text style={{ color: isUser ? '#fff' : '#111' }}>{text}</Text>
+                <Text style={{ color: isUser ? '#fff' : '#111' }}>
+                    {parts.map((part, idx) => {
+                        if (part.type !== 'link') {
+                            return (
+                                <Text key={`t_${idx}`}>{part.value}</Text>
+                            );
+                        }
+
+                        const label = part.postId ? 'Xem bai dang' : part.value;
+                        if (!part.postId) {
+                            return <Text key={`l_${idx}`}>{label}</Text>;
+                        }
+
+                        return (
+                            <Text
+                                key={`l_${idx}`}
+                                style={[styles.msgLink, isUser && styles.msgLinkOnUser]}
+                                onPress={() => handleOpenPost(part.postId)}
+                            >
+                                {label}
+                            </Text>
+                        );
+                    })}
+                </Text>
             </View>
         </View>
     );
@@ -1431,6 +1506,8 @@ const styles = StyleSheet.create({
     msgBubble: { maxWidth: '82%', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14 },
     msgUser: { backgroundColor: '#111' },
     msgBot: { backgroundColor: '#f2f3f5' },
+    msgLink: { color: '#0A66C2', textDecorationLine: 'underline', fontWeight: '700' },
+    msgLinkOnUser: { color: '#fff' },
 
     // Location Modal
     locModalCard: { backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: '88%', overflow: 'hidden' },
