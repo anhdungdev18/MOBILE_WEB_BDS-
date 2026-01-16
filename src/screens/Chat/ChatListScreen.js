@@ -363,7 +363,7 @@ export default function ChatListScreen() {
 
     const emptyText = useMemo(() => {
         if (loading) return '?ang t?i...';
-        return 'B?n ch?a c? cu?c tr? chuy?n n?o.';
+        return 'Bạn chưa có cuộc trò chuyện nào';
     }, [loading]);
 
     const visibleRooms = useMemo(() => {
