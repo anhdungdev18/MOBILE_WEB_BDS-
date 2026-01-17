@@ -131,6 +131,7 @@ export default function CreatePostScreen({ navigation }) {
     // ===== inline errors =====
     const [errArea, setErrArea] = useState('');
     const [errPrice, setErrPrice] = useState('');
+    const [upgradeNotice, setUpgradeNotice] = useState(null);
 
     const clearErrors = () => {
         setErrArea('');
@@ -309,6 +310,8 @@ export default function CreatePostScreen({ navigation }) {
 
         try {
             setLoading(true);
+            setUpgradeNotice(null);
+            setUpgradeNotice(null);
             const res = await client.get(ENDPOINTS.POST_DETAIL(resolvedPostId));
             const data = res?.data?.result || res?.data;
             prefillFromPost(data);
@@ -514,6 +517,14 @@ export default function CreatePostScreen({ navigation }) {
         return ok;
     };
 
+    const goUpgrade = useCallback(() => {
+        const parentNav = navigation.getParent();
+        (parentNav || navigation).navigate('Tài khoản', {
+            screen: 'ProfileHome',
+            params: { openVipModal: true },
+        });
+    }, [navigation]);
+
     const submit = async () => {
         if (!canSubmit) {
             Alert.alert('Thiếu dữ liệu', 'Bạn cần nhập tiêu đề và ghim vị trí (tọa độ).');
@@ -689,7 +700,38 @@ export default function CreatePostScreen({ navigation }) {
             }
         } catch (e) {
             console.log('Submit post error:', e?.response?.status, e?.response?.data || e.message);
-            Alert.alert('Lỗi', 'Không thể thực hiện. Kiểm tra dữ liệu và API.');
+            const status = e?.response?.status;
+            const errorCode = e?.response?.data?.error;
+            const serverMessage = e?.response?.data?.message || e?.response?.data?.detail;
+            const rawMessage = String(serverMessage || '');
+            const isDailyLimitError = status === 400 && errorCode === 'MAX_DAILY_POSTS_REACHED';
+            if (isDailyLimitError) {
+                setUpgradeNotice({
+                    message:
+                        rawMessage ||
+                        'Ban da dat toi da bai dang trong ngay. Vui long nang cap VIP de dang nhieu hon.',
+                });
+            }
+            const isMembershipError =
+                status === 402 ||
+                status === 403 ||
+                /vip|gói|goi|membership|nâng cấp|nang cap/i.test(rawMessage);
+
+            if (isMembershipError) {
+                const parentNav = navigation.getParent();
+                const goUpgrade = () =>
+                    (parentNav || navigation).navigate('Tài khoản', {
+                        screen: 'ProfileHome',
+                        params: { openVipModal: true },
+                    });
+
+                Alert.alert('Thông báo', 'Bạn chưa đăng ký gói, vui lòng mua', [
+                    { text: 'Hủy', style: 'cancel' },
+                    { text: 'Nâng cấp VIP', onPress: goUpgrade },
+                ]);
+            } else {
+                Alert.alert('Lỗi', rawMessage || 'Không thể thực hiện. Kiểm tra dữ liệu và API.');
+            }
         } finally {
             setLoading(false);
         }
@@ -948,6 +990,17 @@ export default function CreatePostScreen({ navigation }) {
                         />
                     </Section>
 
+                    {upgradeNotice ? (
+                        <View style={styles.upgradeCard}>
+                            <Text style={styles.upgradeTitle}>Gioi han dang bai</Text>
+                            <Text style={styles.upgradeText}>{upgradeNotice.message}</Text>
+                            <TouchableOpacity style={styles.upgradeBtn} onPress={goUpgrade} activeOpacity={0.9}>
+                                <Ionicons name="person-circle-outline" size={18} color="#111" />
+                                <Text style={styles.upgradeBtnText}>Di chuyen toi Profile nang cap VIP</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : null}
+
                     <TouchableOpacity
                         style={[styles.submitBtn, (!canSubmit || loading) && { opacity: 0.5 }]}
                         onPress={submit}
@@ -1081,4 +1134,28 @@ const styles = StyleSheet.create({
 
     note: { marginTop: 10, color: '#666', lineHeight: 18, paddingHorizontal: 2 },
     noteSmall: { marginTop: 10, color: '#666', lineHeight: 18, fontSize: 12 },
+
+    upgradeCard: {
+        marginTop: 16,
+        borderWidth: 1,
+        borderColor: '#f1d18a',
+        backgroundColor: '#fff7e0',
+        borderRadius: 14,
+        padding: 12,
+    },
+    upgradeTitle: { fontWeight: '900', color: '#5a3a00' },
+    upgradeText: { marginTop: 6, color: '#6b4b12', lineHeight: 18 },
+    upgradeBtn: {
+        marginTop: 10,
+        borderWidth: 1,
+        borderColor: '#e2b44b',
+        borderRadius: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: '#ffd77a',
+    },
+    upgradeBtnText: { fontWeight: '900', color: '#111' },
 });

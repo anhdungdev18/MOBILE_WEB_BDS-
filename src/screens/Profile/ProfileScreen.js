@@ -1,6 +1,6 @@
 // src/screens/Profile/ProfileScreen.js
 import { Ionicons } from '@expo/vector-icons';
-import { useIsFocused, useNavigation } from '@react-navigation/native';
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
@@ -24,6 +24,7 @@ const DEFAULT_AVATAR = 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
 
 export default function ProfileScreen() {
     const navigation = useNavigation();
+    const route = useRoute();
     const isFocused = useIsFocused();
     const { logout } = useContext(AuthContext);
 
@@ -66,6 +67,13 @@ export default function ProfileScreen() {
             fetchMembership();
         }
     }, [isFocused]);
+
+    useEffect(() => {
+        if (route?.params?.openVipModal) {
+            setVipModalVisible(true);
+            navigation.setParams({ openVipModal: undefined });
+        }
+    }, [route?.params?.openVipModal, navigation]);
 
     const displayName = useMemo(() => {
         const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim();

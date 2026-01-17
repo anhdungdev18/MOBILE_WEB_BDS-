@@ -5,7 +5,7 @@ import { ENDPOINTS } from './endpoints';
 
 const client = axios.create({
     // ⚠️ Sửa đúng IP backend của bạn
-    baseURL: 'http://192.168.1.30:8000',
+    baseURL: 'http://10.48.9.21:8000',
     timeout: 15000,
     headers: {
         'Content-Type': 'application/json',
